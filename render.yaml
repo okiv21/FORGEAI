@@ -1,0 +1,31 @@
+# Render Blueprint for the FastAPI backend.
+# Import this repo as a Blueprint in Render, or create a Web Service pointing at
+# backend/Dockerfile. Secrets (sync: false) are set in the Render dashboard.
+services:
+  - type: web
+    name: forgeai-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: false          # deploys are triggered by the CI deploy hook
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_FRONTEND_MODEL
+        value: openai/gpt-5.6-sol,qwen/qwen3-coder:free,poolside/laguna-m.1:free
+      - key: OPENROUTER_BACKEND_MODEL
+        value: poolside/laguna-m.1:free,cohere/north-mini-code:free,qwen/qwen3-coder:free
+      - key: OPENROUTER_PM_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free
+      - key: OPENROUTER_REVIEWER_MODEL
+        value: deepseek/deepseek-v4-flash,nvidia/nemotron-3-ultra-550b-a55b:free
+      # Supabase (server-side, for persistence/usage — service role stays secret)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Comma-separated allowed CORS origins (your Vercel URL)
+      - key: FRONTEND_ORIGIN
+        sync: false

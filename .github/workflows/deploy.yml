@@ -1,0 +1,44 @@
+name: Deploy
+
+# Runs on every push to main:
+#   1. migrate       -> apply Supabase migrations (must succeed first)
+#   2. deploy-frontend + deploy-backend -> run IN PARALLEL once migrate passes
+on:
+  push:
+    branches: [main]
+
+jobs:
+  migrate:
+    name: Supabase migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Push migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          supabase db push
+
+  deploy-frontend:
+    name: Deploy frontend (Vercel)
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel deploy hook
+        run: curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+
+  deploy-backend:
+    name: Deploy backend (Render)
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"

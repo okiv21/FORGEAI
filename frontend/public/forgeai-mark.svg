@@ -1,0 +1,13 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="steel" x1="54" y1="43" x2="202" y2="211" gradientUnits="userSpaceOnUse"><stop stop-color="#F8FAFC"/><stop offset=".42" stop-color="#B9E9FF"/><stop offset="1" stop-color="#55C7FF"/></linearGradient>
+    <linearGradient id="ember" x1="128" y1="24" x2="157" y2="102" gradientUnits="userSpaceOnUse"><stop stop-color="#FFD166"/><stop offset="1" stop-color="#FF6B35"/></linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="64" fill="#05070B"/>
+  <path d="M68 72L128 38L188 72V145L128 218L68 145V72Z" stroke="#1E3340" stroke-width="6"/>
+  <path d="M89 76L150 76L169 96L151 116H117V150H161L139 180H89V76Z" fill="url(#steel)"/>
+  <path d="M92 180H166L142 207H114L92 180Z" fill="#55C7FF" opacity=".9"/>
+  <path d="M128 27L139 54L166 65L139 76L128 103L117 76L90 65L117 54L128 27Z" fill="url(#ember)" filter="url(#glow)"/>
+  <circle cx="179" cy="79" r="7" fill="#FF8A4C"/><path d="M170 83L153 94" stroke="#FF8A4C" stroke-width="4" stroke-linecap="round"/>
+</svg>

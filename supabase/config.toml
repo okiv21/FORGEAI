@@ -1,0 +1,4 @@
+# Minimal Supabase CLI config so `supabase db push` can find the migrations.
+# `project_id` is a local label; the real project is selected in CI via
+# `supabase link --project-ref <SUPABASE_PROJECT_REF>`.
+project_id = "ai-product-studio"

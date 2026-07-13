@@ -1,0 +1,24 @@
+# Claude / editor tooling
+.claude/
+
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+backend/.env
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
+npm-debug.log*
+
+# Secrets / env files (keep only the *.example templates)
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# Misc
+.DS_Store
+*.log
