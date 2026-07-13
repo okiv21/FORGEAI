@@ -34,9 +34,17 @@ allowed_origins = tuple(
     if origin.strip()
 ) or DEFAULT_LOCAL_ORIGINS
 
+# Vercel serves each deploy from a fresh hashed *.vercel.app hostname, so an exact
+# allowlist breaks whenever the URL changes or a visitor lands on a preview URL.
+# Allow any vercel.app subdomain via regex; override with ALLOWED_ORIGIN_REGEX.
+allowed_origin_regex = os.getenv(
+    "ALLOWED_ORIGIN_REGEX", r"https://[a-zA-Z0-9-]+\.vercel\.app"
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(allowed_origins),
+    allow_origin_regex=allowed_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
 )
