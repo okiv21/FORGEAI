@@ -18,6 +18,7 @@ type TabId =
   | "reviewer"
   | "qa"
   | "security"
+  | "remediation"
   | "devops"
   | "docs";
 
@@ -31,6 +32,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "reviewer", label: "Review" },
   { id: "qa", label: "QA" },
   { id: "security", label: "Security" },
+  { id: "remediation", label: "Fixes" },
   { id: "devops", label: "DevOps" },
   { id: "docs", label: "Docs" },
 ];
@@ -52,12 +54,19 @@ export function StudioPreview({
     () => Object.fromEntries(agents.map((a) => [a.meta.id, a])),
     [agents]
   );
+  const remediationText = byId["remediation"]?.text ?? "";
   const frontendText = byId["frontend"]?.text ?? "";
   const uiuxText = byId["uiux"]?.text ?? "";
-  const html = useMemo(() => extractHtmlPreview(frontendText), [frontendText]);
-  const reactCode = useMemo(() => extractReactComponent(frontendText), [frontendText]);
+  // Prefer the Remediation Engineer's corrected component once it's runnable; fall
+  // back to the original Frontend output while remediation is still in progress.
+  const previewSource = extractReactComponent(remediationText)
+    ? remediationText
+    : frontendText;
+  const html = useMemo(() => extractHtmlPreview(previewSource), [previewSource]);
+  const reactCode = useMemo(() => extractReactComponent(previewSource), [previewSource]);
   const spec = useMemo(() => extractLayoutSpec(uiuxText), [uiuxText]);
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const docAgent = tab !== "preview" ? byId[tab] : undefined;
 
@@ -71,7 +80,13 @@ export function StudioPreview({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur">
+    <div
+      className={
+        expanded
+          ? "fixed inset-0 z-50 flex flex-col overflow-hidden border border-white/10 bg-neutral-950"
+          : "flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur"
+      }
+    >
       {/* tab bar */}
       <div className="flex items-center gap-1 border-b border-white/10 p-2">
         <div className="flex flex-1 flex-wrap gap-1">
@@ -99,6 +114,12 @@ export function StudioPreview({
             );
           })}
         </div>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="rounded-lg px-2.5 py-1.5 text-xs text-neutral-400 transition hover:bg-white/5 hover:text-neutral-200"
+        >
+          {expanded ? "Minimize" : "Expand"}
+        </button>
         <button
           onClick={copy}
           className="rounded-lg px-2.5 py-1.5 text-xs text-neutral-400 transition hover:bg-white/5 hover:text-neutral-200"

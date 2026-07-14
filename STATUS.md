@@ -9,8 +9,10 @@ A running summary of what's built and verified, and what's left.
 ## ✅ Done & verified
 
 ### Core pipeline
-- **10-agent sequential pipeline** (PM → Database → Backend → UI/UX → Frontend →
-  Reviewer → QA → Security → DevOps → Docs), streamed live over SSE.
+- **11-agent sequential pipeline** (PM → Database → Backend → UI/UX → Frontend →
+  Reviewer → QA → Security → Remediation → DevOps → Docs), streamed live over SSE.
+  The Remediation Engineer consumes the Reviewer/QA/Security findings and emits
+  corrected, hardened code (which the preview then shows).
 - Each agent consumes the **structured output** of the ones before it.
 - Full end-to-end runs verified (schema, backend, UI, reviews, docs all produced).
 
@@ -87,7 +89,7 @@ A running summary of what's built and verified, and what's left.
 ## 💵 Cost note
 
 The paid models are **GPT-5.6-sol** (UI/UX + Frontend) and **DeepSeek V4-Flash**
-(Reviewer + Security). A full 10-agent run costs roughly **$0.50–1** depending on
+(Reviewer + Security). A full 11-agent run costs roughly **$0.50–1** depending on
 output size; everything else runs on free models. The usage cap (25/day) is the
 guardrail.
 

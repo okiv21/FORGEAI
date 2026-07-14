@@ -10,7 +10,7 @@ front of you.
 
 ## What it does
 
-You type an idea. Ten agents run in sequence, each consuming the structured
+You type an idea. Eleven agents run in sequence, each consuming the structured
 output of the ones before it, streaming their work into a live studio UI:
 
 ```
@@ -69,7 +69,7 @@ each agent falls back to free models and finally a local **Ollama** model. Run
 ```
 Next.js + Tailwind + three.js (frontend)         FastAPI (backend)
   ├─ eclipse hero, studio UI                        ├─ orchestrator.py  (sequential pipeline, SSE)
-  ├─ Live Device Preview (Sandpack)                 ├─ agents.py        (10 agents + prompts)
+  ├─ Live Device Preview (Sandpack)                 ├─ agents.py        (11 agents + prompts)
   ├─ Supabase Auth + history sidebar   ──direct──▶  ├─ model_router.py  (fallback chains, vision, resilience)
   └─ calls backend at NEXT_PUBLIC_API_BASE  (SSE)   └─ design_taste.py  (anti-slop brief)
 

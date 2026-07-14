@@ -24,6 +24,7 @@ type TabId =
   | "reviewer"
   | "qa"
   | "security"
+  | "remediation"
   | "devops"
   | "docs";
 
@@ -401,7 +402,7 @@ export default function Home() {
               />
             </div>
 
-            <div className="lg:sticky lg:top-[76px] lg:h-[calc(100vh-100px)]">
+            <div className="h-[80vh] lg:sticky lg:top-[76px] lg:h-[calc(100vh-100px)]">
               <StudioPreview
                 agents={agents}
                 tab={tab}
@@ -456,7 +457,7 @@ function Hero({
       <div className="relative z-10 mx-auto flex min-h-[calc(100vh-57px)] max-w-3xl flex-col items-center justify-center px-6 py-16 text-center">
         <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-neutral-300 backdrop-blur">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          A team of 10 AI agents, working in sequence
+          A team of 11 AI agents, working in sequence
         </div>
 
         <h1 className="text-5xl font-semibold leading-[1.02] tracking-tight sm:text-7xl">
@@ -467,8 +468,9 @@ function Hero({
 
         <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-neutral-400">
           Describe your app — and, if you have them, drop in product photos or a
-          concept. Ten specialist agents produce the PRD, schema, backend, a
-          taste-driven UI, tests, security, and deploy plan, assembled live.
+          concept. Eleven specialist agents produce the PRD, schema, backend, a
+          taste-driven UI, tests, security, applied fixes, and deploy plan,
+          assembled live.
         </p>
 
         {/* input panel */}

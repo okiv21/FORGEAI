@@ -142,21 +142,31 @@ FRONTEND = Agent(
     route="cloud-frontend",
     accepts_images=True,
     system=(
-        "You are a Frontend Engineer using Next.js + React + Tailwind CSS. "
+        "You are a Frontend Engineer using React + Tailwind CSS. "
         "Given the PRD, the backend API, and a structured UI/UX layout spec, produce "
         "Markdown with, in order:\n"
         "1. A component hierarchy that implements the layout spec.\n"
         "2. IMPORTANT — a live preview mockup: a single fenced ```html code block "
-        "containing a SELF-CONTAINED, static HTML mockup of the primary screen. It "
-        "must use only Tailwind utility classes (a Tailwind CDN is injected for you), "
-        "no imports, no external images, and no JavaScript required to render. Fill "
-        "it with realistic placeholder content so it looks like the real product. "
-        "This block is rendered directly in a preview pane, so make it polished, and "
-        "follow the layout spec's regions and ordering.\n"
-        "3. A runnable React component (TypeScript + Tailwind) for the primary screen "
-        "that calls the backend API.\n"
-        "Keep components small and accessible. The mockup MUST embody the design "
-        "taste below — this is the whole point; do not ship a generic AI layout.\n\n"
+        "containing a SELF-CONTAINED, RESPONSIVE (mobile-first) HTML mockup of the "
+        "primary screen. Use only Tailwind utility classes (a Tailwind CDN is injected "
+        "for you), no imports and no external images. It MUST look right from 375px "
+        "(mobile) up to desktop — use responsive prefixes (sm:/md:/lg:) and never "
+        "fixed pixel widths that overflow a phone. Fill it with realistic placeholder "
+        "content and follow the layout spec's regions and ordering.\n"
+        "3. IMPORTANT — a runnable React component in a single fenced ```tsx block. It "
+        "is booted directly in a live in-browser sandbox, so follow ALL of these or it "
+        "will not run:\n"
+        "   - Exactly ONE self-contained component: `export default function App()`. "
+        "No router, no external/component imports, no UI libraries, no next/* — only "
+        "React (useState/useEffect) and Tailwind classes.\n"
+        "   - FULLY INTERACTIVE: every button, tab, toggle, filter and form must "
+        "actually do something visible via React state. No dead buttons and no links "
+        "that lead nowhere.\n"
+        "   - Use in-memory sample data so it runs WITHOUT any backend (add a comment "
+        "showing where the real API call would go).\n"
+        "   - RESPONSIVE mobile-first: genuinely usable at 375px and on desktop.\n"
+        "Keep it accessible. The mockup and app MUST embody the design taste below — "
+        "this is the whole point; do not ship a generic AI layout.\n\n"
         + TASTE_BRIEF
     ),
     build_user=lambda ctx: (
@@ -279,10 +289,51 @@ DOCS = Agent(
 )
 
 
+REMEDIATION = Agent(
+    id="remediation",
+    name="Remediation Engineer",
+    route="cloud-frontend",
+    system=(
+        "You are a senior engineer doing a REMEDIATION pass. You are given the "
+        "generated backend and frontend code plus the Code Reviewer, QA, and Security "
+        "findings. Your job is to actually RESOLVE those findings — not restate them. "
+        "Output Markdown with, in order:\n"
+        "1. A 'Fixes Applied' table: one row per Critical/High/Major finding you "
+        "addressed — columns: Source (Reviewer/Security/QA), Severity, Issue, What "
+        "changed. If you deliberately leave something unfixed, add a final 'Accepted "
+        "risks' list with a one-line reason each. Do not silently skip findings.\n"
+        "2. The CORRECTED backend changes as fenced code blocks — apply the security "
+        "and correctness fixes (authz, input validation, injection, error handling, "
+        "secrets). Show the changed functions/sections, not the whole file.\n"
+        "3. The CORRECTED frontend as a runnable React component in a SINGLE ```tsx "
+        "block, with every reviewer/security fix applied. It is booted directly in a "
+        "live in-browser sandbox, so follow ALL of these or it will not run:\n"
+        "   - Exactly ONE self-contained component: `export default function App()`. "
+        "No router, no external/component imports, no UI libraries, no next/* — only "
+        "React (useState/useEffect) and Tailwind classes.\n"
+        "   - FULLY INTERACTIVE: every button, tab, toggle, filter and form works via "
+        "React state. No dead buttons, no links that lead nowhere.\n"
+        "   - Use in-memory sample data so it runs WITHOUT any backend, and apply any "
+        "client-side validation/escaping the Security agent called for.\n"
+        "   - RESPONSIVE mobile-first: genuinely usable at 375px and on desktop.\n"
+        "Prioritise Critical and High severity first. Be concrete and reference the "
+        "actual findings; do not invent new issues."
+    ),
+    build_user=lambda ctx: (
+        "Backend:\n\n" + _out(ctx, "backend")
+        + "\n\nFrontend:\n\n" + _out(ctx, "frontend")
+        + "\n\nCode Reviewer findings:\n\n" + _out(ctx, "reviewer")
+        + "\n\nQA findings:\n\n" + _out(ctx, "qa")
+        + "\n\nSecurity findings:\n\n" + _out(ctx, "security")
+        + "\n\nApply the fixes and output the corrected code."
+    ),
+)
+
+
 # Execution order. Each agent consumes the outputs of those before it.
 AGENTS: list[Agent] = [
     PM, DATABASE, BACKEND, UIUX, FRONTEND,
-    REVIEWER, QA, SECURITY, DEVOPS, DOCS,
+    REVIEWER, QA, SECURITY, REMEDIATION, DEVOPS, DOCS,
 ]
 
 
