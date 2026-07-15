@@ -506,10 +506,10 @@ function Hero({
         </h1>
 
         <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-neutral-400">
-          Describe your app — and, if you have them, drop in product photos or a
-          concept. Eleven specialist agents produce the PRD, schema, backend, a
-          taste-driven UI, tests, security, applied fixes, and deploy plan,
-          assembled live.
+          Describe your app, and add product photos or a concept if you have
+          them. Eleven specialist agents produce the requirements, database
+          schema, backend, a designed interface, tests, a security review,
+          applied fixes, and a deployment plan, assembled live as you watch.
         </p>
 
         {/* input panel */}
