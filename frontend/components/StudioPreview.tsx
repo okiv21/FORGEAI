@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AgentState } from "@/lib/types";
 import { extractHtmlPreview, extractLayoutSpec } from "@/lib/parse";
 import { extractReactComponent } from "@/lib/react-preview";
@@ -68,6 +68,16 @@ export function StudioPreview({
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  // Let Escape exit the full-screen preview (and guard against being stuck).
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
+
   const docAgent = tab !== "preview" ? byId[tab] : undefined;
 
   async function copy() {
@@ -116,9 +126,13 @@ export function StudioPreview({
         </div>
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="rounded-lg px-2.5 py-1.5 text-xs text-neutral-400 transition hover:bg-white/5 hover:text-neutral-200"
+          className={`rounded-lg px-2.5 py-1.5 text-xs transition ${
+            expanded
+              ? "bg-white/10 text-white hover:bg-white/20"
+              : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
+          }`}
         >
-          {expanded ? "Minimize" : "Expand"}
+          {expanded ? "✕ Close (Esc)" : "⤢ Expand"}
         </button>
         <button
           onClick={copy}

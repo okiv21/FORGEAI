@@ -293,6 +293,7 @@ REMEDIATION = Agent(
     id="remediation",
     name="Remediation Engineer",
     route="cloud-frontend",
+    accepts_images=True,
     system=(
         "You are a senior engineer doing a REMEDIATION pass. You are given the "
         "generated backend and frontend code plus the Code Reviewer, QA, and Security "
