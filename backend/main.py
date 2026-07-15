@@ -15,10 +15,11 @@ import os
 
 from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents import AGENTS, agent_public
+from export_bundle import build_zip
 from model_router import ModelRouter
 from orchestrator import run_pipeline
 from persistence import ProductionStore
@@ -57,6 +58,18 @@ class RunRequest(BaseModel):
     images: list[str] = Field(default_factory=list, max_length=6)
 
 
+class ExportRequest(BaseModel):
+    idea: str = ""
+    # Completed run outputs: agent id -> generated Markdown/code.
+    outputs: dict[str, str] = Field(default_factory=dict)
+
+
+def _slug(text: str) -> str:
+    s = "".join(c if c.isalnum() else "-" for c in text.lower()).strip("-")
+    parts = [p for p in s.split("-") if p][:4]
+    return "-".join(parts) or "forgeai-product"
+
+
 @app.get("/health")
 async def health():
     return await router.health()
@@ -87,4 +100,16 @@ async def run(req: RunRequest, authorization: str | None = Header(default=None))
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/export")
+async def export(req: ExportRequest):
+    """Bundle a completed run into a downloadable zip (code + docs + host guide)."""
+    data = build_zip(req.idea, req.outputs)
+    filename = f"{_slug(req.idea)}.zip"
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

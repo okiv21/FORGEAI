@@ -50,6 +50,7 @@ export default function Home() {
   const [projectsLoading, setProjectsLoading] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const agentMetas = useRef<AgentMeta[]>([]);
 
   useEffect(() => {
@@ -130,6 +131,34 @@ export default function Home() {
 
   function stop() {
     abortRef.current?.abort();
+  }
+
+  async function downloadZip() {
+    if (exporting) return;
+    setExporting(true);
+    setNotice(null);
+    try {
+      const outputs = Object.fromEntries(agents.map((a) => [a.meta.id, a.text]));
+      const resp = await fetch(`${API_BASE}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea, outputs }),
+      });
+      if (!resp.ok) throw new Error("Export failed");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${slug(idea)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setNotice("Could not build the download. Please try again.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function run(seed?: string) {
@@ -393,6 +422,15 @@ export default function Home() {
                   </div>
                   <span className="text-xs tabular-nums text-neutral-500">{progress}%</span>
                 </div>
+                {done && !running && (
+                  <button
+                    onClick={downloadZip}
+                    disabled={exporting}
+                    className="mt-3 w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                  >
+                    {exporting ? "Preparing your download…" : "⬇ Download project (.zip)"}
+                  </button>
+                )}
               </div>
 
               <AgentTimeline
