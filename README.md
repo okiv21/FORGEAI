@@ -1,130 +1,156 @@
 # FORGEAI
 
-Your AI startup co-founder. Describe an app idea — optionally drop in product
-photos — and a pipeline of **10 specialist AI agents** turns it into a full
-product plan: PRD, database schema, backend, a taste-driven UI, a real running
-preview, tests, a security audit, a deploy plan, and docs — assembled live in
-front of you.
+Turn a product idea into a complete, buildable plan. You describe an app in a
+sentence, optionally add a few product photos, and a team of 11 specialist AI
+agents produces the requirements, database, backend, a designed and interactive
+UI, tests, a security review, applied fixes, and a deployment plan. Everything is
+assembled live in front of you, and you can download the whole thing as a folder.
 
 ![status](https://img.shields.io/badge/status-active-brightgreen)
 
 ## What it does
 
-You type an idea. Eleven agents run in sequence, each consuming the structured
-output of the ones before it, streaming their work into a live studio UI:
+You type an idea. Eleven agents run one after another, and each agent builds on
+the finished work of the ones before it. Their progress streams into the studio
+so you watch the product take shape in real time.
+
+The pipeline runs in this order:
 
 ```
-PM → Database → Backend → UI/UX → Frontend → Reviewer → QA → Security → DevOps → Docs
+Product Manager  ->  Database  ->  Backend  ->  UI/UX  ->  Frontend
+      ->  Reviewer  ->  QA  ->  Security  ->  Remediation  ->  DevOps  ->  Docs
 ```
 
-The right-hand **Studio Preview** assembles the product in three stages, then
-becomes a real, interactive app you can click through:
+The preview panel on the right fills in over three stages, then becomes a real,
+clickable app:
 
 ```
-skeleton  →  wireframe (UI/UX JSON spec)  →  Live Device Preview (running React app)
+loading skeleton  ->  wireframe (from the UI/UX layout)  ->  live running app
 ```
 
-## Highlights
+## Key features
 
-- **Live Device Preview** — the generated frontend boots as a *real running app*
-  in the browser via [Sandpack](https://sandpack.codesandbox.io) (no hosting),
-  with an **iPhone / Desktop** toggle and a static-mockup fallback.
-- **Design taste** — the UI/UX + Frontend agents run on **GPT-5.6-sol** with an
-  anti-slop [taste brief](backend/design_taste.py) baked in, so output looks
-  intentionally designed (no purple-gradient, three-identical-cards slop).
-- **Image upload** — attach product or concept photos; the vision-capable design
-  agents use them to match your real product.
-- **Accounts + history** — Supabase Auth, a per-user project-history sidebar
-  (click to reload a past run), and a daily usage cap. Row Level Security keeps
-  every user to their own rows.
-- **Resilient model routing** — each agent has a fallback *chain*; a rate-limited
-  or unavailable model fails over to the next, ending in a local Ollama safety net.
-- **Stop button** — abort a run mid-flight.
+**Live preview that actually runs.** The generated frontend boots as a real
+React app inside your browser using [Sandpack](https://sandpack.codesandbox.io),
+so you can click through it. There is no hosting or build step to see it work.
+The app is written mobile first, so it fits any screen once you deploy it.
 
-## Agents & models
+**Design quality, not AI slop.** The design agents run on a strong model with a
+built in taste brief ([design_taste.py](backend/design_taste.py)), so the result
+looks intentionally designed instead of the usual generic layout.
 
-| Agent | Primary model | Notes |
-|-------|---------------|-------|
-| Product Manager | `nemotron-3-ultra-550b` *(free)* | PRD: problem, users, MVP, metrics |
-| Database Architect | `laguna-m.1` *(free)* | Normalized Postgres schema + DDL |
-| Backend Engineer | `laguna-m.1` *(free)* | REST API + FastAPI starter |
-| **UI/UX Designer** | **`gpt-5.6-sol`** *(paid)* + taste + 🖼️ | Structured JSON layout spec (not images) |
-| **Frontend Engineer** | **`gpt-5.6-sol`** *(paid)* + taste + 🖼️ | HTML mockup + runnable React |
-| Code Reviewer | `deepseek-v4-flash` *(paid, cheap)* | Correctness + security review |
-| QA Tester | `laguna-m.1` *(free)* | Test plan + example tests |
-| Security Reviewer | `deepseek-v4-flash` *(paid, cheap)* | Focused security audit |
-| DevOps Engineer | `laguna-m.1` *(free)* | Deploy plan, Dockerfile, CI |
-| Technical Writer | `nemotron-3-ultra-550b` *(free)* | Project README |
+**Your own product photos, used for real.** Upload up to six product or concept
+images. The design agents use them for visual direction, and your actual photos
+are placed into the generated app instead of AI invented stand ins.
 
-🖼️ = receives uploaded images. All cloud models are reached via **OpenRouter**;
-each agent falls back to free models and finally a local **Ollama** model. Run
-`python backend/list_free_models.py` to see what's free on your account.
+**Findings get fixed, not just listed.** The Reviewer and Security agents flag
+issues, then a Remediation agent takes those findings and produces corrected,
+hardened code. The preview shows the fixed version.
 
-> Hardware note: the app was built to run on a 16GB / no-GPU laptop. Agents run
-> **one at a time**, so only one local model is resident at once — the cloud
-> models simply improve quality and speed.
+**Download the whole project.** When a build finishes, one click gives you a zip
+folder containing every part of the plan, the generated code as real files, and a
+plain English Word document that walks you through hosting it step by step.
 
-## Architecture
+**Accounts and history.** Sign in with Supabase, and every run is saved to a
+personal history sidebar you can click to reload. A daily usage cap and row level
+security keep each account to its own data.
+
+**Resilient by design.** Every agent has a fallback chain of models. If one model
+is rate limited or unavailable, the run switches to the next option automatically,
+so a build still completes.
+
+## The 11 agents
+
+| Agent | Role |
+|-------|------|
+| Product Manager | Writes the PRD: the problem, target users, MVP scope, and success metrics |
+| Database Architect | Designs a normalized Postgres schema with the SQL to create it |
+| Backend Engineer | Designs the REST API and a FastAPI starting point |
+| UI/UX Designer | Produces a structured layout for each screen (uses your images) |
+| Frontend Engineer | Builds an interactive, responsive React app and an HTML mockup (uses your images) |
+| Code Reviewer | Reviews the design for correctness and consistency bugs |
+| QA Tester | Writes a test plan and example automated tests |
+| Security Reviewer | Runs a focused security audit of the design |
+| Remediation Engineer | Applies the review and security findings and outputs corrected code |
+| DevOps Engineer | Writes a deployment plan, a Dockerfile, and a CI workflow |
+| Technical Writer | Produces the project README |
+
+Cloud models are reached through [OpenRouter](https://openrouter.ai). Each agent
+prefers its assigned models, falls back to free models, and finally to a local
+[Ollama](https://ollama.com) model as a last resort. To see which models are free
+on your account right now, run:
+
+```bash
+python backend/list_free_models.py
+```
+
+> Hardware note: the app was designed to run on a 16GB laptop with no GPU. Agents
+> run one at a time, so only a single local model is ever loaded. The cloud models
+> are there to improve quality and speed, not because they are required.
+
+## How it is built
 
 ```
-Next.js + Tailwind + three.js (frontend)         FastAPI (backend)
-  ├─ eclipse hero, studio UI                        ├─ orchestrator.py  (sequential pipeline, SSE)
-  ├─ Live Device Preview (Sandpack)                 ├─ agents.py        (11 agents + prompts)
-  ├─ Supabase Auth + history sidebar   ──direct──▶  ├─ model_router.py  (fallback chains, vision, resilience)
-  └─ calls backend at NEXT_PUBLIC_API_BASE  (SSE)   └─ design_taste.py  (anti-slop brief)
+Frontend (Next.js, Tailwind, three.js)          Backend (FastAPI)
+  Studio UI and eclipse hero                       orchestrator.py  runs the pipeline and streams events
+  Live preview via Sandpack                        agents.py        the 11 agents and their prompts
+  Supabase auth and history sidebar                model_router.py  fallback chains, vision, resilience
+  Talks to the backend over a live stream          export_bundle.py builds the downloadable zip
+                                                    design_taste.py  the taste brief
 
-                     Supabase: Postgres (projects, usage) + Auth + RLS
+  Supabase: Postgres (projects, usage) with Auth and row level security
 ```
 
-The browser talks to FastAPI **directly** (not via a Next.js rewrite) because the
-dev proxy buffers Server-Sent Events, which would break the live streaming.
+The browser talks to the backend directly rather than through a Next.js proxy,
+because the proxy buffers the live stream and would break the real time updates.
 
-## Local setup
+## Run it locally
 
 ### 1. Backend
 
 ```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\activate            # Windows;  source .venv/bin/activate on macOS/Linux
+.venv\Scripts\activate            # Windows. On macOS or Linux: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env            # add OPENROUTER_API_KEY (see notes below)
+copy .env.example .env            # then add your keys (see below)
 uvicorn main:app --reload --port 8000
 ```
 
-`backend/.env` (OpenRouter powers the cloud agents):
+Settings in `backend/.env`:
 
-- `OPENROUTER_API_KEY` — required for the paid models (GPT-5.6-sol, DeepSeek).
-- `OPENROUTER_*_MODEL` — comma-separated fallback chains per agent tier.
-- With **no** key, every agent falls back to local Ollama (`ollama pull qwen3:8b`,
-  `llama3.2:3b`).
+* `OPENROUTER_API_KEY` powers the cloud agents.
+* `OPENROUTER_*_MODEL` are comma separated fallback chains, one per agent tier.
+* With no key set, every agent falls back to local Ollama. Pull the models first
+  with `ollama pull qwen3:8b` and `ollama pull llama3.2:3b`.
 
 ### 2. Frontend
 
 ```bash
 cd frontend
 npm install
-copy .env.local.example .env.local   # set NEXT_PUBLIC_* (API + Supabase)
+copy .env.local.example .env.local   # then set the NEXT_PUBLIC_ values
 npm run dev                          # http://localhost:3000
 ```
 
-`frontend/.env.local`:
+Settings in `frontend/.env.local`:
 
-- `NEXT_PUBLIC_API_BASE` — backend URL (default `http://localhost:8000`).
-- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — enable Auth +
-  history. Without them the app still runs, just without accounts/history.
+* `NEXT_PUBLIC_API_BASE` is the backend URL (default `http://localhost:8000`).
+* `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` enable accounts
+  and history. Without them the app still runs, just without sign in.
 
-Apply the DB migration (`supabase/migrations/…_init.sql`) via the Supabase SQL
-Editor or `supabase db push`.
+Apply the database migrations in `supabase/migrations/` using the Supabase SQL
+Editor, or with `supabase db push`.
 
-## Deployment
+## Deploy it
 
-Free tier: **Vercel** (frontend) · **Render** (backend) · **Supabase** (DB + Auth).
-CI at [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) runs
-migrations then triggers both deploys in parallel. Full steps and the required
-secrets are in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+The free tier stack is Vercel for the frontend, Render for the backend, and
+Supabase for the database and auth. A GitHub Actions workflow
+([deploy.yml](.github/workflows/deploy.yml)) can apply migrations and trigger both
+deploys automatically on every push. Full instructions and the list of required
+secrets are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Project status
 
-See **[STATUS.md](STATUS.md)** for a detailed breakdown of what's done and what's
-left.
+For a detailed breakdown of what is finished and what is still in progress, see
+[STATUS.md](STATUS.md).
