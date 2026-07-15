@@ -24,10 +24,16 @@ def _build_message(agent: Agent, ctx: dict):
     images = ctx.get("images") or []
     if not (agent.accepts_images and images):
         return text
+    slots = ", ".join(f"__USER_IMAGE_{i}__" for i in range(len(images)))
     note = (
         f"\n\nThe user attached {len(images)} reference image(s) of their product "
         "or a concept they want. Use them to guide the visual direction, colors, "
-        "and product representation — match what they show."
+        "and product representation — match what they show.\n"
+        "IMPORTANT: to make the ACTUAL uploaded image(s) appear in your HTML/React "
+        f"output, use these EXACT strings as the image `src`: {slots}. They are "
+        "swapped for the real uploaded images before rendering. Place each where that "
+        "product/photo belongs (hero, product cards, gallery). Do NOT invent external "
+        "image URLs for the user's own product when a placeholder fits."
     )
     content = [{"type": "text", "text": text + note}]
     for img in images:

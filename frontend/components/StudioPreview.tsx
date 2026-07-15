@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AgentState } from "@/lib/types";
-import { extractHtmlPreview, extractLayoutSpec } from "@/lib/parse";
+import { extractHtmlPreview, extractLayoutSpec, injectUserImages } from "@/lib/parse";
 import { extractReactComponent } from "@/lib/react-preview";
 import { Wireframe } from "./Wireframe";
 import { LiveDevicePreview } from "./LiveDevicePreview";
@@ -43,12 +43,14 @@ export function StudioPreview({
   onTab,
   appName,
   phase,
+  images,
 }: {
   agents: AgentState[];
   tab: TabId;
   onTab: (t: TabId, pinned: boolean) => void;
   appName: string;
   phase: string;
+  images: string[];
 }) {
   const byId = useMemo(
     () => Object.fromEntries(agents.map((a) => [a.meta.id, a])),
@@ -62,8 +64,15 @@ export function StudioPreview({
   const previewSource = extractReactComponent(remediationText)
     ? remediationText
     : frontendText;
-  const html = useMemo(() => extractHtmlPreview(previewSource), [previewSource]);
-  const reactCode = useMemo(() => extractReactComponent(previewSource), [previewSource]);
+  // Swap the `__USER_IMAGE_n__` slots for the user's actual uploaded photos.
+  const html = useMemo(() => {
+    const raw = extractHtmlPreview(previewSource);
+    return raw ? injectUserImages(raw, images) : null;
+  }, [previewSource, images]);
+  const reactCode = useMemo(() => {
+    const raw = extractReactComponent(previewSource);
+    return raw ? injectUserImages(raw, images) : null;
+  }, [previewSource, images]);
   const spec = useMemo(() => extractLayoutSpec(uiuxText), [uiuxText]);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);

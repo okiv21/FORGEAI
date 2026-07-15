@@ -96,6 +96,32 @@ export function extractMoodboard(text: string): Concept[] | null {
   }
 }
 
+// A neutral placeholder for any image slot the agent referenced but the user
+// didn't upload (or a loaded-from-history run where the originals are gone).
+const IMAGE_FALLBACK =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">' +
+      '<rect width="100%" height="100%" fill="#e5e7eb"/>' +
+      '<text x="50%" y="50%" fill="#9ca3af" font-family="sans-serif" ' +
+      'font-size="16" text-anchor="middle" dominant-baseline="middle">image</text>' +
+      "</svg>"
+  );
+
+/**
+ * Replace the `__USER_IMAGE_n__` slots the design agents emit with the user's
+ * actual uploaded image data-URLs, so their real product photos appear in the
+ * generated mockup/app. Any slot without a matching upload gets a neutral
+ * placeholder instead of a broken image.
+ */
+export function injectUserImages(code: string, images: string[]): string {
+  if (!code) return code;
+  return code.replace(
+    /__USER_IMAGE_(\d+)__/g,
+    (_, n) => images[Number(n)] ?? IMAGE_FALLBACK
+  );
+}
+
 /** Wrap a fragment (or full doc) into a complete, Tailwind-enabled document. */
 export function wrapPreview(html: string): string {
   const isFullDoc = /<html[\s>]/i.test(html);

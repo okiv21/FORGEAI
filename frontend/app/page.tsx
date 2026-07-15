@@ -409,6 +409,7 @@ export default function Home() {
                 onTab={selectTab}
                 appName={slug(idea)}
                 phase={phase}
+                images={images}
               />
             </div>
           </div>
