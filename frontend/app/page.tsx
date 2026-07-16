@@ -8,10 +8,6 @@ import { fileToDownscaledDataUrl } from "@/lib/upload";
 import { HealthBar } from "@/components/HealthBar";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { StudioPreview } from "@/components/StudioPreview";
-import { AuthScreen } from "@/components/AuthScreen";
-import { HistorySidebar } from "@/components/HistorySidebar";
-import { useAuth } from "@/lib/auth";
-import { deleteProject, listProjects, renameProject, type ProjectRow } from "@/lib/projects";
 
 type TabId =
   | "preview"
@@ -35,13 +31,6 @@ const EXAMPLES = [
   "An online store for my handmade ceramics",
   "A booking site for my pottery classes",
   "A tip splitting app for restaurant teams",
-];
-
-const STEPS: { id: Step; label: string }[] = [
-  { id: "idea", label: "idea" },
-  { id: "clarify", label: "clarify" },
-  { id: "forge", label: "forge" },
-  { id: "assets", label: "assets" },
 ];
 
 // agent id -> exported artifact name shown on the assets step
@@ -75,10 +64,6 @@ export default function Home() {
   const [autoFollow, setAutoFollow] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
 
-  const { user, session, loading: authLoading, configured } = useAuth();
-  const [projects, setProjects] = useState<ProjectRow[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(false);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const agentMetas = useRef<AgentMeta[]>([]);
@@ -93,24 +78,6 @@ export default function Home() {
       .then((d) => (agentMetas.current = d.agents ?? []))
       .catch(() => {});
   }, []);
-
-  async function refreshProjects() {
-    if (!user) return;
-    setProjectsLoading(true);
-    try {
-      setProjects(await listProjects());
-    } catch {
-      /* RLS or offline — leave list as-is */
-    } finally {
-      setProjectsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (user) refreshProjects();
-    else setProjects([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
 
   const started = agents.length > 0;
   const done = started && agents.every((a) => a.status === "done" || a.status === "error");
@@ -161,6 +128,17 @@ export default function Home() {
     abortRef.current?.abort();
   }
 
+  function startOver() {
+    stop();
+    setAgents([]);
+    setIdea("");
+    setImages([]);
+    setQuestions([]);
+    setAnswers({});
+    setNotice(null);
+    setStep("idea");
+  }
+
   // Step 01 -> 02: fetch clarifying questions, or go straight to the forge if
   // the backend has none (or is unreachable — never block the run on this).
   async function beginClarify() {
@@ -201,7 +179,6 @@ export default function Home() {
       .filter((q) => (answers[q.id] ?? "").trim())
       .map((q) => ({ question: q.question, answer: answers[q.id].trim() }));
 
-    setActiveProjectId(null);
     setRunning(true);
     setAgents([]);
     setAutoFollow(true);
@@ -214,10 +191,7 @@ export default function Home() {
     try {
       const resp = await fetch(`${API_BASE}/run`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idea: prompt, images, answers: answerList }),
         signal: controller.signal,
       });
@@ -283,14 +257,7 @@ export default function Home() {
       case "agent_error":
         patch(ev.id, (a) => ({ ...a, status: "error", error: ev.error }));
         break;
-      case "run_done":
-        break;
-      case "run_saved":
-        setActiveProjectId(ev.project_id);
-        refreshProjects();
-        break;
-      case "persistence_error":
-        setNotice("Your build completed, but it could not be saved to history.");
+      default:
         break;
     }
   }
@@ -326,274 +293,163 @@ export default function Home() {
     triggerDownload(new Blob([injectUserImages(a.text, images)], { type: "text/markdown" }), file);
   }
 
-  function loadProject(p: ProjectRow) {
-    stop();
-    const metas =
-      agentMetas.current.length > 0
-        ? agentMetas.current
-        : Object.keys(p.code_refs).map((id) => ({ id, name: id, route: "cloud" }));
-    setAgents(
-      metas
-        .filter((m) => p.code_refs[m.id] !== undefined)
-        .map((m) => ({
-          meta: m,
-          status: "done" as const,
-          text: p.code_refs[m.id] ?? "",
-        }))
-    );
-    setIdea(p.idea);
-    setActiveProjectId(p.id);
-    setAutoFollow(false);
-    setTab("preview");
-    setNotice(null);
-    setStep("forge");
-  }
-
-  function newProject() {
-    stop();
-    setAgents([]);
-    setIdea("");
-    setImages([]);
-    setQuestions([]);
-    setAnswers({});
-    setActiveProjectId(null);
-    setNotice(null);
-    setStep("idea");
-  }
-
-  async function handleRenameProject(project: ProjectRow) {
-    const name = window.prompt("Rename project", project.idea)?.trim();
-    if (!name || name === project.idea) return;
-    try {
-      await renameProject(project.id, name);
-      setProjects((current) => current.map((p) => p.id === project.id ? { ...p, idea: name } : p));
-      if (activeProjectId === project.id) setIdea(name);
-    } catch {
-      setNotice("Could not rename this project.");
-    }
-  }
-
-  async function handleDeleteProject(project: ProjectRow) {
-    if (!window.confirm(`Delete "${project.idea}"? This cannot be undone.`)) return;
-    try {
-      await deleteProject(project.id);
-      setProjects((current) => current.filter((p) => p.id !== project.id));
-      if (activeProjectId === project.id) newProject();
-    } catch {
-      setNotice("Could not delete this project.");
-    }
-  }
-
   const progress = started
     ? Math.round((agents.filter((a) => a.status === "done").length / agents.length) * 100)
     : 0;
 
   const answeredCount = questions.filter((q) => (answers[q.id] ?? "").trim()).length;
 
-  const stepIndex = STEPS.findIndex((s) => s.id === step);
-  function canVisit(target: Step): boolean {
-    if (target === "idea") return true;
-    if (target === "clarify") return questions.length > 0 && !started;
-    if (target === "forge") return started;
-    if (target === "assets") return done;
-    return false;
-  }
-
   return (
     <div className="relative min-h-screen">
       <header className="sticky top-0 z-30 border-b border-line bg-forge-bg/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-3">
-              <LogoMark />
-              <span className="font-display text-sm font-bold tracking-[0.2em] text-forge-bright">
-                FORGEAI
-              </span>
-            </div>
-            <nav className="hidden items-center gap-5 font-mono text-[11px] md:flex">
-              {STEPS.map((s, i) => {
-                const isCurrent = s.id === step;
-                const visitable = canVisit(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => visitable && setStep(s.id)}
-                    disabled={!visitable}
-                    className={`tracking-wider transition ${
-                      isCurrent
-                        ? "text-forge-ice"
-                        : i < stepIndex
-                        ? "text-forge-steel hover:text-forge-ice"
-                        : "text-forge-steel/40"
-                    } ${visitable && !isCurrent ? "cursor-pointer" : ""}`}
-                  >
-                    {String(i + 1).padStart(2, "0")} {s.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          <button onClick={startOver} className="flex items-center gap-3" aria-label="Start over">
+            <LogoMark />
+            <span className="font-display text-sm font-bold tracking-[0.2em] text-forge-bright">
+              FORGEAI
+            </span>
+          </button>
           <HealthBar health={health} />
         </div>
       </header>
 
-      {configured && authLoading ? (
-        <div className="flex min-h-[calc(100vh-53px)] items-center justify-center text-sm text-forge-steel">
-          Loading…
-        </div>
-      ) : configured && !user ? (
-        <AuthScreen />
-      ) : (
-        <div className="flex">
-          {configured && user && (
-            <HistorySidebar
-              projects={projects}
-              activeId={activeProjectId}
-              onNew={newProject}
-              onSelect={loadProject}
-              onRename={handleRenameProject}
-              onDelete={handleDeleteProject}
-              loading={projectsLoading}
-            />
-          )}
-          <div className="min-w-0 flex-1">
-            {notice && (
-              <div className="border-b border-forge-amber/20 bg-forge-amber/10 px-6 py-2 text-center text-xs text-forge-amber">
-                {notice}
-              </div>
-            )}
+      <div className="min-w-0">
+        {notice && (
+          <div className="border-b border-forge-amber/20 bg-forge-amber/10 px-6 py-2 text-center text-xs text-forge-amber">
+            {notice}
+          </div>
+        )}
 
-            {step === "idea" && (
-              <IdeaStep
-                idea={idea}
-                setIdea={setIdea}
-                images={images}
-                onAddFiles={addFiles}
-                onRemoveImage={(i) => setImages((p) => p.filter((_, j) => j !== i))}
-                onBuild={beginClarify}
-                onExample={(ex) => setIdea(ex)}
-                busy={clarifyLoading || running}
-                busyLabel={clarifyLoading ? "Writing questions…" : "Working…"}
-              />
-            )}
+        {step === "idea" && (
+          <IdeaStep
+            idea={idea}
+            setIdea={setIdea}
+            images={images}
+            onAddFiles={addFiles}
+            onRemoveImage={(i) => setImages((p) => p.filter((_, j) => j !== i))}
+            onBuild={beginClarify}
+            onExample={(ex) => setIdea(ex)}
+            busy={clarifyLoading || running}
+            busyLabel={clarifyLoading ? "Writing questions…" : "Working…"}
+          />
+        )}
 
-            {step === "clarify" && (
-              <ClarifyStep
-                idea={idea}
-                questions={questions}
-                answers={answers}
-                setAnswer={(id, v) => setAnswers((prev) => ({ ...prev, [id]: v }))}
-                answered={answeredCount}
-                onBack={() => setStep("idea")}
-                onForge={run}
-                running={running}
-              />
-            )}
+        {step === "clarify" && (
+          <ClarifyStep
+            idea={idea}
+            questions={questions}
+            answers={answers}
+            setAnswer={(id, v) => setAnswers((prev) => ({ ...prev, [id]: v }))}
+            answered={answeredCount}
+            onBack={() => setStep("idea")}
+            onForge={run}
+            running={running}
+          />
+        )}
 
-            {step === "forge" && (
-              <main className="mx-auto max-w-[1440px] px-6 py-6">
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_1fr]">
-                  <div className="flex flex-col gap-4">
-                    <div className="rounded-forge border border-line bg-tint p-4">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <label className="font-mono text-[11px] uppercase tracking-wider text-forge-steel">
-                          Product idea
-                        </label>
-                        <span className="font-mono text-[11px] tabular-nums text-forge-steel">
-                          {agents.filter((a) => a.status === "done").length} / {agents.length || 11} done
-                        </span>
-                      </div>
-                      <textarea
-                        value={idea}
-                        onChange={(e) => setIdea(e.target.value)}
-                        rows={2}
-                        disabled={running}
-                        className="w-full resize-none rounded-forge border border-line bg-forge-bg/60 p-3 text-sm outline-none transition focus:border-forge-blue disabled:opacity-60"
-                      />
-                      {images.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {images.map((src, i) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img key={i} src={src} alt="" className="h-9 w-9 rounded-forge object-cover ring-1 ring-line" />
-                          ))}
-                        </div>
-                      )}
-                      <div className="mt-2 flex items-center gap-3">
-                        {running ? (
-                          <button
-                            onClick={stop}
-                            className="inline-flex items-center gap-1.5 rounded-forge border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
-                          >
-                            <span className="h-2.5 w-2.5 rounded-[1px] bg-red-400" />
-                            Stop
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => beginClarify()}
-                            disabled={!idea.trim() || clarifyLoading}
-                            className="rounded-forge bg-forge-blue px-4 py-2 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            {clarifyLoading ? "Writing questions…" : done ? "Rebuild" : "Forge"}
-                          </button>
-                        )}
-                        <div className="flex-1">
-                          <div className="h-1 overflow-hidden rounded-full bg-white/10">
-                            <div
-                              className="h-full rounded-full bg-forge-blue transition-all duration-500"
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                        </div>
-                        <span className="font-mono text-xs tabular-nums text-forge-steel">{progress}%</span>
-                      </div>
+        {step === "forge" && (
+          <main className="mx-auto max-w-[1440px] px-6 py-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_1fr]">
+              <div className="flex flex-col gap-4">
+                <div className="rounded-forge border border-line bg-tint p-4">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="font-mono text-[11px] uppercase tracking-wider text-forge-steel">
+                      Product idea
+                    </label>
+                    <span className="font-mono text-[11px] tabular-nums text-forge-steel">
+                      {agents.filter((a) => a.status === "done").length} / {agents.length || 11} done
+                    </span>
+                  </div>
+                  <textarea
+                    value={idea}
+                    onChange={(e) => setIdea(e.target.value)}
+                    rows={2}
+                    disabled={running}
+                    className="w-full resize-none rounded-forge border border-line bg-forge-bg/60 p-3 text-sm outline-none transition focus:border-forge-blue disabled:opacity-60"
+                  />
+                  {images.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {images.map((src, i) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={i} src={src} alt="" className="h-9 w-9 rounded-forge object-cover ring-1 ring-line" />
+                      ))}
                     </div>
-
-                    <AgentTimeline
-                      agents={agents}
-                      selected={tab}
-                      onSelect={(id) => selectTab(id as TabId, true)}
-                    />
-
-                    {done && !running && (
+                  )}
+                  <div className="mt-2 flex items-center gap-3">
+                    {running ? (
                       <button
-                        onClick={() => setStep("assets")}
-                        className="w-full rounded-forge bg-forge-blue px-4 py-3 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice"
+                        onClick={stop}
+                        className="inline-flex items-center gap-1.5 rounded-forge border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
                       >
-                        View assets →
+                        <span className="h-2.5 w-2.5 rounded-[1px] bg-red-400" />
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => beginClarify()}
+                        disabled={!idea.trim() || clarifyLoading}
+                        className="rounded-forge bg-forge-blue px-4 py-2 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {clarifyLoading ? "Writing questions…" : done ? "Rebuild" : "Forge"}
                       </button>
                     )}
-                  </div>
-
-                  <div className="h-[80vh] lg:sticky lg:top-[72px] lg:h-[calc(100vh-96px)]">
-                    <StudioPreview
-                      agents={agents}
-                      tab={tab}
-                      onTab={selectTab}
-                      appName={slug(idea)}
-                      phase={phase}
-                      images={images}
-                    />
+                    <div className="flex-1">
+                      <div className="h-1 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-forge-blue transition-all duration-500"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs tabular-nums text-forge-steel">{progress}%</span>
                   </div>
                 </div>
-              </main>
-            )}
 
-            {step === "assets" && (
-              <AssetsStep
-                idea={idea}
-                agents={agents}
-                exporting={exporting}
-                onDownloadZip={downloadZip}
-                onView={(id) => {
-                  setStep("forge");
-                  selectTab(id, true);
-                }}
-                onDownloadDoc={downloadDoc}
-              />
-            )}
-          </div>
-        </div>
-      )}
+                <AgentTimeline
+                  agents={agents}
+                  selected={tab}
+                  onSelect={(id) => selectTab(id as TabId, true)}
+                />
+
+                {done && !running && (
+                  <button
+                    onClick={() => setStep("assets")}
+                    className="w-full rounded-forge bg-forge-blue px-4 py-3 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice"
+                  >
+                    View assets →
+                  </button>
+                )}
+              </div>
+
+              <div className="h-[80vh] lg:sticky lg:top-[72px] lg:h-[calc(100vh-96px)]">
+                <StudioPreview
+                  agents={agents}
+                  tab={tab}
+                  onTab={selectTab}
+                  appName={slug(idea)}
+                  phase={phase}
+                  images={images}
+                />
+              </div>
+            </div>
+          </main>
+        )}
+
+        {step === "assets" && (
+          <AssetsStep
+            idea={idea}
+            agents={agents}
+            exporting={exporting}
+            onDownloadZip={downloadZip}
+            onBack={() => setStep("forge")}
+            onView={(id) => {
+              setStep("forge");
+              selectTab(id, true);
+            }}
+            onDownloadDoc={downloadDoc}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -817,6 +673,7 @@ function AssetsStep({
   agents,
   exporting,
   onDownloadZip,
+  onBack,
   onView,
   onDownloadDoc,
 }: {
@@ -824,6 +681,7 @@ function AssetsStep({
   agents: AgentState[];
   exporting: boolean;
   onDownloadZip: () => void;
+  onBack: () => void;
   onView: (id: TabId) => void;
   onDownloadDoc: (id: TabId, file: string) => void;
 }) {
@@ -832,7 +690,15 @@ function AssetsStep({
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-forge-blue">Assets</p>
+      <div className="flex items-center justify-between">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-forge-blue">Assets</p>
+        <button
+          onClick={onBack}
+          className="rounded-forge border border-line px-3 py-1.5 font-mono text-xs text-forge-steel transition hover:border-forge-blue hover:text-forge-ice"
+        >
+          ← Back to studio
+        </button>
+      </div>
       <h2 className="mt-2 font-display text-3xl font-bold tracking-tight text-forge-bright sm:text-4xl">
         Your product, forged.
       </h2>

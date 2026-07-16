@@ -26,10 +26,15 @@ class ProductionStore:
         self.service_key = service_key
 
     def user_id_from_authorization(self, authorization: str | None) -> str | None:
+        """Resolve a Supabase user id if a valid token is supplied.
+
+        Login is currently optional: anonymous runs return None (no history,
+        no per-user cap) instead of raising, so the app works without accounts.
+        """
         if not self.url or not self.service_key:
             return None
         if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in to run a generation.")
+            return None
         token = authorization.removeprefix("Bearer ").strip()
         try:
             response = httpx.get(
@@ -39,10 +44,10 @@ class ProductionStore:
             )
             response.raise_for_status()
             user = response.json()
-        except Exception as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session.") from exc
+        except Exception:
+            return None
         if not token or not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session.")
+            return None
         return str(user["id"])
 
     def claim_generation(self, user_id: str | None) -> None:
