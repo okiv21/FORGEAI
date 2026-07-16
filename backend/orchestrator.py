@@ -36,8 +36,11 @@ def _build_message(agent: Agent, ctx: dict):
         "the product itself belongs in product cards/detail imagery; a photo of a "
         "person/model using or holding the product is LIFESTYLE imagery — use it for "
         "the hero, banners or brand sections, NOT as a catalog product image. If the "
-        "user's prompt says how to use an image, follow that exactly. Do NOT invent "
-        "external image URLs for the user's own product when a placeholder fits."
+        "user's prompt says how to use an image, follow that exactly.\n"
+        "Use EVERY placeholder at least once — never repeat one image while another "
+        "goes unused. Only reuse an image after all of them appear (e.g. more product "
+        "cards than uploads). Do NOT invent external image URLs for the user's own "
+        "product when a placeholder fits."
     )
     content = [{"type": "text", "text": text + note}]
     for img in images:

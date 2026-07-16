@@ -56,8 +56,45 @@ function sanitize(code: string): string {
   return out.trim();
 }
 
-export function prepareSandpackFiles(code: string): Record<string, string> {
-  return {
+/**
+ * Pull a `tailwind.config = {...}` script out of the agent's HTML mockup, if it
+ * defined one. Generated apps sometimes use custom theme classes (bg-charcoal,
+ * text-rose-premium, ...) whose colors are declared only in the mockup's config;
+ * without carrying that config into the sandbox those classes resolve to nothing
+ * and the app renders invisible white-on-white.
+ */
+function extractTailwindConfig(mockupHtml: string | null): string | null {
+  if (!mockupHtml) return null;
+  const scripts = [...mockupHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)];
+  for (const s of scripts) {
+    const body = s[1] ?? "";
+    if (/tailwind\.config\s*=/.test(body)) return body.trim();
+  }
+  return null;
+}
+
+export function prepareSandpackFiles(
+  code: string,
+  mockupHtml: string | null = null
+): Record<string, string> {
+  const files: Record<string, string> = {
     "/App.tsx": sanitize(code),
   };
+  const twConfig = extractTailwindConfig(mockupHtml);
+  if (twConfig) {
+    // The react-ts template serves /public/index.html; the Tailwind Play CDN
+    // (injected via externalResources) picks up `tailwind.config` from the page.
+    files["/public/index.html"] = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>${twConfig}</script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>`;
+  }
+  return files;
 }

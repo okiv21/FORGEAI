@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentMeta, AgentState, Health } from "@/lib/types";
-import { extractHtmlPreview, extractLayoutSpec } from "@/lib/parse";
+import { extractHtmlPreview, extractLayoutSpec, injectUserImages } from "@/lib/parse";
 import { API_BASE } from "@/lib/api";
 import { fileToDownscaledDataUrl } from "@/lib/upload";
 import { HealthBar } from "@/components/HealthBar";
@@ -138,7 +138,11 @@ export default function Home() {
     setExporting(true);
     setNotice(null);
     try {
-      const outputs = Object.fromEntries(agents.map((a) => [a.meta.id, a.text]));
+      // Swap __USER_IMAGE_n__ slots for the real uploaded photos so the exported
+      // code isn't left with broken placeholder image sources.
+      const outputs = Object.fromEntries(
+        agents.map((a) => [a.meta.id, injectUserImages(a.text, images)])
+      );
       const resp = await fetch(`${API_BASE}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -422,15 +426,6 @@ export default function Home() {
                   </div>
                   <span className="text-xs tabular-nums text-neutral-500">{progress}%</span>
                 </div>
-                {done && !running && (
-                  <button
-                    onClick={downloadZip}
-                    disabled={exporting}
-                    className="mt-3 w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
-                  >
-                    {exporting ? "Preparing your download…" : "⬇ Download project (.zip)"}
-                  </button>
-                )}
               </div>
 
               <AgentTimeline
@@ -438,6 +433,16 @@ export default function Home() {
                 selected={tab}
                 onSelect={(id) => selectTab(id as TabId, true)}
               />
+
+              {done && !running && (
+                <button
+                  onClick={downloadZip}
+                  disabled={exporting}
+                  className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                >
+                  {exporting ? "Preparing your download…" : "⬇ Download project (.zip)"}
+                </button>
+              )}
             </div>
 
             <div className="h-[80vh] lg:sticky lg:top-[76px] lg:h-[calc(100vh-100px)]">

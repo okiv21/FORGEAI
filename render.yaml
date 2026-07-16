@@ -18,7 +18,7 @@ services:
       - key: OPENROUTER_BACKEND_MODEL
         value: poolside/laguna-m.1:free,cohere/north-mini-code:free,qwen/qwen3-coder:free
       - key: OPENROUTER_PM_MODEL
-        value: nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free
+        value: deepseek/deepseek-v4-flash,nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free
       - key: OPENROUTER_REVIEWER_MODEL
         value: deepseek/deepseek-v4-flash,nvidia/nemotron-3-ultra-550b-a55b:free
       # Supabase (server-side, for persistence/usage — service role stays secret)

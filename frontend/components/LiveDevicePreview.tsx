@@ -70,7 +70,7 @@ function Surface({
 }) {
   const srcDoc = useMemo(() => (html ? wrapPreview(html) : ""), [html]);
 
-  if (mode === "live" && reactCode) return <LiveSandbox code={reactCode} />;
+  if (mode === "live" && reactCode) return <LiveSandbox code={reactCode} html={html} />;
   if (!html)
     return (
       <div className="flex h-full items-center justify-center p-6 text-center text-xs text-neutral-500">
@@ -87,8 +87,8 @@ function Surface({
   );
 }
 
-function LiveSandbox({ code }: { code: string }) {
-  const files = useMemo(() => prepareSandpackFiles(code), [code]);
+function LiveSandbox({ code, html }: { code: string; html: string | null }) {
+  const files = useMemo(() => prepareSandpackFiles(code, html), [code, html]);
   return (
     <SandpackProvider
       template="react-ts"
