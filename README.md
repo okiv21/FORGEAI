@@ -1,18 +1,40 @@
 # FORGEAI
 
 Turn a product idea into a complete, buildable plan. You describe an app in a
-sentence, optionally add a few product photos, and a team of 11 specialist AI
-agents produces the requirements, database, backend, a designed and interactive
-UI, tests, a security review, applied fixes, and a deployment plan. Everything is
-assembled live in front of you, and you can download the whole thing as a folder.
+sentence, answer a few quick questions so the agents stop guessing, optionally
+add product photos, and a team of 11 specialist AI agents produces the
+requirements, database, backend, a designed and interactive UI, tests, a
+security review, applied fixes, and a deployment plan. Everything is assembled
+live in front of you, and you can download the whole thing as a folder.
 
 ![status](https://img.shields.io/badge/status-active-brightgreen)
 
 ## What it does
 
-You type an idea. Eleven agents run one after another, and each agent builds on
-the finished work of the ones before it. Their progress streams into the studio
-so you watch the product take shape in real time.
+The studio walks you through four steps:
+
+```
+01 idea  ->  02 clarify  ->  03 forge  ->  04 assets
+```
+
+**Idea.** You describe what you want to build and optionally attach product
+images.
+
+**Clarify.** Before anything runs, the system reads your idea and asks 3 to 4
+questions written specifically for it, each with tappable answer options plus a
+custom answer field. The questions target the choices that most change what gets
+built: who it is for, the core action, how it makes money, the ambition level,
+and any hard constraint. A hair store gets asked about inventory size and
+shipping regions, not generic filler. Your answers are treated as requirements by
+every agent, so the pipeline builds what you meant instead of guessing.
+
+**Forge.** Eleven agents run one after another, and each agent builds on the
+finished work of the ones before it. Their progress streams into the studio so
+you watch the product take shape in real time.
+
+**Assets.** When the run completes you get every artifact in one place: the full
+project as a downloadable zip, plus each document individually viewable and
+downloadable.
 
 The pipeline runs in this order:
 
@@ -29,6 +51,11 @@ loading skeleton  ->  wireframe (from the UI/UX layout)  ->  live running app
 ```
 
 ## Key features
+
+**Clarifying questions, not guesswork.** A dedicated step generates 3 to 4
+questions tailored to your specific idea before the agents run. Tap an option or
+type your own answer; skip anything you like. The answers flow into the product
+requirements, the schema, and the scope of what gets built.
 
 **Live preview that actually runs.** The generated frontend boots as a real
 React app inside your browser using [Sandpack](https://sandpack.codesandbox.io),
@@ -91,11 +118,12 @@ python backend/list_free_models.py
 ## How it is built
 
 ```
-Frontend (Next.js, Tailwind, three.js)          Backend (FastAPI)
-  Studio UI and eclipse hero                       orchestrator.py  runs the pipeline and streams events
+Frontend (Next.js, Tailwind)                    Backend (FastAPI)
+  Four step studio: idea, clarify, forge, assets   orchestrator.py  runs the pipeline and streams events
   Live preview via Sandpack                        agents.py        the 11 agents and their prompts
-  Supabase auth and history sidebar                model_router.py  fallback chains, vision, resilience
-  Talks to the backend over a live stream          export_bundle.py builds the downloadable zip
+  Supabase auth and history sidebar                clarify.py       idea-specific clarifying questions
+  Talks to the backend over a live stream          model_router.py  fallback chains, vision, resilience
+                                                    export_bundle.py builds the downloadable zip
                                                     design_taste.py  the taste brief
 
   Supabase: Postgres (projects, usage) with Auth and row level security

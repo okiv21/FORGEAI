@@ -19,6 +19,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents import AGENTS, agent_public
+from clarify import fold_answers_into_idea, generate_questions
 from export_bundle import build_zip
 from model_router import ModelRouter
 from orchestrator import run_pipeline
@@ -56,6 +57,12 @@ class RunRequest(BaseModel):
     # Optional product/concept reference images as data URLs (base64). Only the
     # vision-capable design agents (UI/UX, Frontend) receive them.
     images: list[str] = Field(default_factory=list, max_length=6)
+    # Clarifying answers gathered before the run: [{question, answer}, ...].
+    answers: list[dict] = Field(default_factory=list, max_length=8)
+
+
+class ClarifyRequest(BaseModel):
+    idea: str
 
 
 class ExportRequest(BaseModel):
@@ -80,13 +87,20 @@ async def agents():
     return {"agents": [agent_public(a) for a in AGENTS]}
 
 
+@app.post("/clarify")
+async def clarify(req: ClarifyRequest):
+    """Generate 3-4 idea-specific clarifying questions with tappable options."""
+    return {"questions": await generate_questions(req.idea, router)}
+
+
 @app.post("/run")
 async def run(req: RunRequest, authorization: str | None = Header(default=None)):
     user_id = store.user_id_from_authorization(authorization)
     store.claim_generation(user_id)
+    idea = fold_answers_into_idea(req.idea, req.answers)
 
     async def event_stream():
-        async for event in run_pipeline(req.idea, router, req.images):
+        async for event in run_pipeline(idea, router, req.images):
             yield f"data: {json.dumps(event)}\n\n"
             if event["type"] == "run_done":
                 try:

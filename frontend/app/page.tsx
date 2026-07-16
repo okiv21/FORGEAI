@@ -8,7 +8,6 @@ import { fileToDownscaledDataUrl } from "@/lib/upload";
 import { HealthBar } from "@/components/HealthBar";
 import { AgentTimeline } from "@/components/AgentTimeline";
 import { StudioPreview } from "@/components/StudioPreview";
-import { ThreeBackground } from "@/components/ThreeBackground";
 import { AuthScreen } from "@/components/AuthScreen";
 import { HistorySidebar } from "@/components/HistorySidebar";
 import { useAuth } from "@/lib/auth";
@@ -28,18 +27,49 @@ type TabId =
   | "devops"
   | "docs";
 
+type Step = "idea" | "clarify" | "forge" | "assets";
+
+type ClarifyQuestion = { id: string; question: string; options: string[] };
+
 const EXAMPLES = [
-  "An online store for premium natural hair care products",
-  "A tool that turns meeting recordings into action items",
-  "A marketplace for renting camera gear between creators",
+  "An online store for my handmade ceramics",
+  "A booking site for my pottery classes",
+  "A tip splitting app for restaurant teams",
+];
+
+const STEPS: { id: Step; label: string }[] = [
+  { id: "idea", label: "idea" },
+  { id: "clarify", label: "clarify" },
+  { id: "forge", label: "forge" },
+  { id: "assets", label: "assets" },
+];
+
+// agent id -> exported artifact name shown on the assets step
+const ARTIFACTS: { id: TabId; file: string; owner: string }[] = [
+  { id: "pm", file: "prd.md", owner: "Product Manager" },
+  { id: "database", file: "schema.sql", owner: "Database Architect" },
+  { id: "backend", file: "backend.md", owner: "Backend Engineer" },
+  { id: "uiux", file: "uiux.md", owner: "UI/UX Designer" },
+  { id: "frontend", file: "frontend.md", owner: "Frontend Engineer" },
+  { id: "reviewer", file: "review.md", owner: "Review" },
+  { id: "qa", file: "qa-report.md", owner: "QA" },
+  { id: "security", file: "security.md", owner: "Security" },
+  { id: "remediation", file: "fixes.md", owner: "Fixes" },
+  { id: "devops", file: "deploy.md", owner: "DevOps" },
+  { id: "docs", file: "README.md", owner: "Docs" },
 ];
 
 export default function Home() {
+  const [step, setStep] = useState<Step>("idea");
   const [idea, setIdea] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [agents, setAgents] = useState<AgentState[]>([]);
   const [running, setRunning] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
+
+  const [questions, setQuestions] = useState<ClarifyQuestion[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [clarifyLoading, setClarifyLoading] = useState(false);
 
   const [tab, setTab] = useState<TabId>("preview");
   const [autoFollow, setAutoFollow] = useState(true);
@@ -94,8 +124,6 @@ export default function Home() {
     return ux ? !!extractLayoutSpec(ux.text) : false;
   }, [agents]);
 
-  // Auto-follow: track the running agent, then jump to Preview once ready.
-  // Depends on primitive activeId (not `active`) + guards the set — no render loop.
   useEffect(() => {
     if (!autoFollow) return;
     const target: TabId | undefined = previewReady
@@ -133,49 +161,52 @@ export default function Home() {
     abortRef.current?.abort();
   }
 
-  async function downloadZip() {
-    if (exporting) return;
-    setExporting(true);
+  // Step 01 -> 02: fetch clarifying questions, or go straight to the forge if
+  // the backend has none (or is unreachable — never block the run on this).
+  async function beginClarify() {
+    const prompt = idea.trim();
+    if (!prompt || clarifyLoading || running) return;
     setNotice(null);
+    setClarifyLoading(true);
     try {
-      // Swap __USER_IMAGE_n__ slots for the real uploaded photos so the exported
-      // code isn't left with broken placeholder image sources.
-      const outputs = Object.fromEntries(
-        agents.map((a) => [a.meta.id, injectUserImages(a.text, images)])
-      );
-      const resp = await fetch(`${API_BASE}/export`, {
+      const resp = await fetch(`${API_BASE}/clarify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, outputs }),
+        body: JSON.stringify({ idea: prompt }),
       });
-      if (!resp.ok) throw new Error("Export failed");
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${slug(idea)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const data = resp.ok ? await resp.json() : { questions: [] };
+      const qs: ClarifyQuestion[] = (data.questions ?? []).filter(
+        (q: any) => q?.question && Array.isArray(q?.options) && q.options.length >= 2
+      );
+      if (qs.length > 0) {
+        setQuestions(qs);
+        setAnswers({});
+        setStep("clarify");
+      } else {
+        run();
+      }
     } catch {
-      setNotice("Could not build the download. Please try again.");
+      run();
     } finally {
-      setExporting(false);
+      setClarifyLoading(false);
     }
   }
 
-  async function run(seed?: string) {
-    const prompt = (seed ?? idea).trim();
+  async function run() {
+    const prompt = idea.trim();
     if (!prompt || running) return;
-    if (seed) setIdea(seed);
     setNotice(null);
+
+    const answerList = questions
+      .filter((q) => (answers[q.id] ?? "").trim())
+      .map((q) => ({ question: q.question, answer: answers[q.id].trim() }));
 
     setActiveProjectId(null);
     setRunning(true);
     setAgents([]);
     setAutoFollow(true);
     setTab("pm");
+    setStep("forge");
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -187,7 +218,7 @@ export default function Home() {
           "Content-Type": "application/json",
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ idea: prompt, images }),
+        body: JSON.stringify({ idea: prompt, images, answers: answerList }),
         signal: controller.signal,
       });
       if (!resp.ok) {
@@ -212,8 +243,6 @@ export default function Home() {
       }
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        // Aborting the fetch disconnects the SSE stream, which cancels the
-        // backend generator. Mark the in-flight agent as stopped.
         setAgents((prev) =>
           prev.map((a) =>
             a.status === "running" ? { ...a, status: "stopped" } : a
@@ -266,6 +295,37 @@ export default function Home() {
     }
   }
 
+  async function downloadZip() {
+    if (exporting) return;
+    setExporting(true);
+    setNotice(null);
+    try {
+      // Swap __USER_IMAGE_n__ slots for the real uploaded photos so the exported
+      // code isn't left with broken placeholder image sources.
+      const outputs = Object.fromEntries(
+        agents.map((a) => [a.meta.id, injectUserImages(a.text, images)])
+      );
+      const resp = await fetch(`${API_BASE}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idea, outputs }),
+      });
+      if (!resp.ok) throw new Error("Export failed");
+      const blob = await resp.blob();
+      triggerDownload(blob, `${slug(idea)}.zip`);
+    } catch {
+      setNotice("Could not build the download. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function downloadDoc(id: TabId, file: string) {
+    const a = agents.find((x) => x.meta.id === id);
+    if (!a?.text) return;
+    triggerDownload(new Blob([injectUserImages(a.text, images)], { type: "text/markdown" }), file);
+  }
+
   function loadProject(p: ProjectRow) {
     stop();
     const metas =
@@ -286,6 +346,7 @@ export default function Home() {
     setAutoFollow(false);
     setTab("preview");
     setNotice(null);
+    setStep("forge");
   }
 
   function newProject() {
@@ -293,24 +354,27 @@ export default function Home() {
     setAgents([]);
     setIdea("");
     setImages([]);
+    setQuestions([]);
+    setAnswers({});
     setActiveProjectId(null);
     setNotice(null);
+    setStep("idea");
   }
 
   async function handleRenameProject(project: ProjectRow) {
-    const idea = window.prompt("Rename project", project.idea)?.trim();
-    if (!idea || idea === project.idea) return;
+    const name = window.prompt("Rename project", project.idea)?.trim();
+    if (!name || name === project.idea) return;
     try {
-      await renameProject(project.id, idea);
-      setProjects((current) => current.map((p) => p.id === project.id ? { ...p, idea } : p));
-      if (activeProjectId === project.id) setIdea(idea);
+      await renameProject(project.id, name);
+      setProjects((current) => current.map((p) => p.id === project.id ? { ...p, idea: name } : p));
+      if (activeProjectId === project.id) setIdea(name);
     } catch {
       setNotice("Could not rename this project.");
     }
   }
 
   async function handleDeleteProject(project: ProjectRow) {
-    if (!window.confirm(`Delete \"${project.idea}\"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete "${project.idea}"? This cannot be undone.`)) return;
     try {
       await deleteProject(project.id);
       setProjects((current) => current.filter((p) => p.id !== project.id));
@@ -324,23 +388,57 @@ export default function Home() {
     ? Math.round((agents.filter((a) => a.status === "done").length / agents.length) * 100)
     : 0;
 
+  const answeredCount = questions.filter((q) => (answers[q.id] ?? "").trim()).length;
+
+  const stepIndex = STEPS.findIndex((s) => s.id === step);
+  function canVisit(target: Step): boolean {
+    if (target === "idea") return true;
+    if (target === "clarify") return questions.length > 0 && !started;
+    if (target === "forge") return started;
+    if (target === "assets") return done;
+    return false;
+  }
+
   return (
     <div className="relative min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/60 backdrop-blur-xl">
+      <header className="sticky top-0 z-30 border-b border-line bg-forge-bg/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-3">
-            <LogoMark />
-            <div className="leading-tight">
-              <div className="text-sm font-semibold tracking-tight">FORGEAI</div>
-              <div className="text-[11px] text-neutral-500">idea in · product forged</div>
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-3">
+              <LogoMark />
+              <span className="font-display text-sm font-bold tracking-[0.2em] text-forge-bright">
+                FORGEAI
+              </span>
             </div>
+            <nav className="hidden items-center gap-5 font-mono text-[11px] md:flex">
+              {STEPS.map((s, i) => {
+                const isCurrent = s.id === step;
+                const visitable = canVisit(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => visitable && setStep(s.id)}
+                    disabled={!visitable}
+                    className={`tracking-wider transition ${
+                      isCurrent
+                        ? "text-forge-ice"
+                        : i < stepIndex
+                        ? "text-forge-steel hover:text-forge-ice"
+                        : "text-forge-steel/40"
+                    } ${visitable && !isCurrent ? "cursor-pointer" : ""}`}
+                  >
+                    {String(i + 1).padStart(2, "0")} {s.label}
+                  </button>
+                );
+              })}
+            </nav>
           </div>
           <HealthBar health={health} />
         </div>
       </header>
 
       {configured && authLoading ? (
-        <div className="flex min-h-[calc(100vh-57px)] items-center justify-center text-sm text-neutral-500">
+        <div className="flex min-h-[calc(100vh-53px)] items-center justify-center text-sm text-forge-steel">
           Loading…
         </div>
       ) : configured && !user ? (
@@ -360,103 +458,138 @@ export default function Home() {
           )}
           <div className="min-w-0 flex-1">
             {notice && (
-              <div className="border-b border-amber-500/20 bg-amber-500/10 px-6 py-2 text-center text-xs text-amber-300">
+              <div className="border-b border-forge-amber/20 bg-forge-amber/10 px-6 py-2 text-center text-xs text-forge-amber">
                 {notice}
               </div>
             )}
-            {!started ? (
-              <Hero
+
+            {step === "idea" && (
+              <IdeaStep
                 idea={idea}
                 setIdea={setIdea}
                 images={images}
                 onAddFiles={addFiles}
                 onRemoveImage={(i) => setImages((p) => p.filter((_, j) => j !== i))}
-                onRun={() => run()}
+                onBuild={beginClarify}
                 onExample={(ex) => setIdea(ex)}
+                busy={clarifyLoading || running}
+                busyLabel={clarifyLoading ? "Writing questions…" : "Working…"}
+              />
+            )}
+
+            {step === "clarify" && (
+              <ClarifyStep
+                idea={idea}
+                questions={questions}
+                answers={answers}
+                setAnswer={(id, v) => setAnswers((prev) => ({ ...prev, [id]: v }))}
+                answered={answeredCount}
+                onBack={() => setStep("idea")}
+                onForge={run}
                 running={running}
               />
-            ) : (
+            )}
+
+            {step === "forge" && (
               <main className="mx-auto max-w-[1440px] px-6 py-6">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_1fr]">
-            <div className="flex flex-col gap-4">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <label className="mb-1.5 block text-xs font-medium text-neutral-400">
-                  Product idea
-                </label>
-                <textarea
-                  value={idea}
-                  onChange={(e) => setIdea(e.target.value)}
-                  rows={2}
-                  disabled={running}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-black/40 p-3 text-sm outline-none transition focus:border-white/30 disabled:opacity-60"
-                />
-                {images.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {images.map((src, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={i} src={src} alt="" className="h-9 w-9 rounded object-cover ring-1 ring-white/15" />
-                    ))}
-                  </div>
-                )}
-                <div className="mt-2 flex items-center gap-3">
-                  {running ? (
-                    <button
-                      onClick={stop}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
-                    >
-                      <span className="h-2.5 w-2.5 rounded-[2px] bg-red-400" />
-                      Stop
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => run()}
-                      disabled={!idea.trim()}
-                      className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {done ? "Rebuild" : "Build"}
-                    </button>
-                  )}
-                  <div className="flex-1">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-violet-400 via-sky-300 to-rose-300 transition-all duration-500"
-                        style={{ width: `${progress}%` }}
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,440px)_1fr]">
+                  <div className="flex flex-col gap-4">
+                    <div className="rounded-forge border border-line bg-tint p-4">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <label className="font-mono text-[11px] uppercase tracking-wider text-forge-steel">
+                          Product idea
+                        </label>
+                        <span className="font-mono text-[11px] tabular-nums text-forge-steel">
+                          {agents.filter((a) => a.status === "done").length} / {agents.length || 11} done
+                        </span>
+                      </div>
+                      <textarea
+                        value={idea}
+                        onChange={(e) => setIdea(e.target.value)}
+                        rows={2}
+                        disabled={running}
+                        className="w-full resize-none rounded-forge border border-line bg-forge-bg/60 p-3 text-sm outline-none transition focus:border-forge-blue disabled:opacity-60"
                       />
+                      {images.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {images.map((src, i) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={i} src={src} alt="" className="h-9 w-9 rounded-forge object-cover ring-1 ring-line" />
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 flex items-center gap-3">
+                        {running ? (
+                          <button
+                            onClick={stop}
+                            className="inline-flex items-center gap-1.5 rounded-forge border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
+                          >
+                            <span className="h-2.5 w-2.5 rounded-[1px] bg-red-400" />
+                            Stop
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => beginClarify()}
+                            disabled={!idea.trim() || clarifyLoading}
+                            className="rounded-forge bg-forge-blue px-4 py-2 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {clarifyLoading ? "Writing questions…" : done ? "Rebuild" : "Forge"}
+                          </button>
+                        )}
+                        <div className="flex-1">
+                          <div className="h-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-forge-blue transition-all duration-500"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="font-mono text-xs tabular-nums text-forge-steel">{progress}%</span>
+                      </div>
                     </div>
+
+                    <AgentTimeline
+                      agents={agents}
+                      selected={tab}
+                      onSelect={(id) => selectTab(id as TabId, true)}
+                    />
+
+                    {done && !running && (
+                      <button
+                        onClick={() => setStep("assets")}
+                        className="w-full rounded-forge bg-forge-blue px-4 py-3 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice"
+                      >
+                        View assets →
+                      </button>
+                    )}
                   </div>
-                  <span className="text-xs tabular-nums text-neutral-500">{progress}%</span>
+
+                  <div className="h-[80vh] lg:sticky lg:top-[72px] lg:h-[calc(100vh-96px)]">
+                    <StudioPreview
+                      agents={agents}
+                      tab={tab}
+                      onTab={selectTab}
+                      appName={slug(idea)}
+                      phase={phase}
+                      images={images}
+                    />
+                  </div>
                 </div>
-              </div>
+              </main>
+            )}
 
-              <AgentTimeline
+            {step === "assets" && (
+              <AssetsStep
+                idea={idea}
                 agents={agents}
-                selected={tab}
-                onSelect={(id) => selectTab(id as TabId, true)}
+                exporting={exporting}
+                onDownloadZip={downloadZip}
+                onView={(id) => {
+                  setStep("forge");
+                  selectTab(id, true);
+                }}
+                onDownloadDoc={downloadDoc}
               />
-
-              {done && !running && (
-                <button
-                  onClick={downloadZip}
-                  disabled={exporting}
-                  className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50"
-                >
-                  {exporting ? "Preparing your download…" : "⬇ Download project (.zip)"}
-                </button>
-              )}
-            </div>
-
-            <div className="h-[80vh] lg:sticky lg:top-[76px] lg:h-[calc(100vh-100px)]">
-              <StudioPreview
-                agents={agents}
-                tab={tab}
-                onTab={selectTab}
-                appName={slug(idea)}
-                phase={phase}
-                images={images}
-              />
-            </div>
-          </div>
-        </main>
             )}
           </div>
         </div>
@@ -465,69 +598,51 @@ export default function Home() {
   );
 }
 
-function Hero({
+function IdeaStep({
   idea,
   setIdea,
   images,
   onAddFiles,
   onRemoveImage,
-  onRun,
+  onBuild,
   onExample,
-  running,
+  busy,
+  busyLabel,
 }: {
   idea: string;
   setIdea: (v: string) => void;
   images: string[];
   onAddFiles: (f: FileList | null) => void;
   onRemoveImage: (i: number) => void;
-  onRun: () => void;
+  onBuild: () => void;
   onExample: (ex: string) => void;
-  running: boolean;
+  busy: boolean;
+  busyLabel: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <section className="relative overflow-hidden">
-      {/* eclipse */}
-      <div className="pointer-events-none absolute inset-0">
-        <ThreeBackground />
-        <div className="absolute right-[8%] top-1/2 h-[520px] w-[520px] -translate-y-1/2 rounded-full bg-violet-500/10 blur-[140px]" />
-      </div>
-      {/* giant chromatic ghost word */}
-      <div className="pointer-events-none absolute inset-x-0 top-[38%] select-none text-center">
-        <span className="chromatic-ghost text-[22vw] font-black leading-none">STUDIO</span>
-      </div>
-
-      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-57px)] max-w-3xl flex-col items-center justify-center px-6 py-16 text-center">
-        <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-neutral-300 backdrop-blur">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          A team of 11 AI agents, working in sequence
-        </div>
-
-        <h1 className="text-5xl font-semibold leading-[1.02] tracking-tight sm:text-7xl">
-          Turn an idea into a
-          <br />
-          <span className="spectral-text">shipped product.</span>
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-53px)] max-w-3xl flex-col items-center justify-center px-6 py-16 text-center">
+        <h1 className="font-display text-4xl font-bold leading-[1.05] tracking-tight text-forge-bright sm:text-6xl">
+          Turn an idea into a shipped product.
         </h1>
 
-        <p className="mx-auto mt-5 max-w-lg text-[15px] leading-relaxed text-neutral-400">
-          Describe your app, and add product photos or a concept if you have
-          them. Eleven specialist agents produce the requirements, database
-          schema, backend, a designed interface, tests, a security review,
-          applied fixes, and a deployment plan, assembled live as you watch.
+        <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-forge-steel">
+          Describe what you want to build. Eleven specialist agents write the PRD,
+          schema, backend, UI, tests and deploy plan. You download a working starter app.
         </p>
 
-        {/* input panel */}
-        <div className="mt-8 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/[0.04] p-3 shadow-2xl shadow-black/60 backdrop-blur-xl">
+        <div className="mt-9 w-full max-w-2xl rounded-forge border border-line bg-tint p-3">
           <textarea
             value={idea}
             onChange={(e) => setIdea(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onRun();
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onBuild();
             }}
             rows={3}
-            placeholder="e.g. An online store for premium natural hair care products…"
-            className="w-full resize-none rounded-xl bg-transparent p-3 text-left text-sm outline-none placeholder:text-neutral-600"
+            placeholder="Describe your app idea. What does it do, and for whom?"
+            className="w-full resize-none rounded-forge bg-transparent p-3 text-left text-sm text-forge-bright outline-none placeholder:text-forge-steel/60"
           />
 
           {images.length > 0 && (
@@ -535,10 +650,10 @@ function Hero({
               {images.map((src, i) => (
                 <div key={i} className="group relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt="" className="h-14 w-14 rounded-lg object-cover ring-1 ring-white/15" />
+                  <img src={src} alt="" className="h-14 w-14 rounded-forge object-cover ring-1 ring-line" />
                   <button
                     onClick={() => onRemoveImage(i)}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-xs text-white ring-1 ring-white/20 transition hover:bg-neutral-800"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-forge-bg text-xs text-white ring-1 ring-line transition hover:bg-forge-panel"
                     aria-label="Remove image"
                   >
                     ×
@@ -553,19 +668,20 @@ function Hero({
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={images.length >= 6}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-neutral-300 transition hover:border-white/25 hover:text-white disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-forge border border-line px-2.5 py-1.5 text-xs text-forge-steel transition hover:border-forge-blue hover:text-forge-ice disabled:opacity-40"
               >
-                <PaperclipIcon />
-                {images.length ? `${images.length}/6 images` : "Add product images"}
+                + Add product images
               </button>
-              <span className="hidden text-[11px] text-neutral-600 sm:inline">⌘/Ctrl + Enter</span>
+              <span className="hidden font-mono text-[10px] text-forge-steel/60 sm:inline">
+                png or jpg, up to 6
+              </span>
             </div>
             <button
-              onClick={onRun}
-              disabled={running || !idea.trim()}
-              className="rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={onBuild}
+              disabled={busy || !idea.trim()}
+              className="rounded-forge bg-forge-blue px-5 py-2.5 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Build my product
+              {busy ? busyLabel : "Build my product"}
             </button>
           </div>
           <input
@@ -586,7 +702,7 @@ function Hero({
             <button
               key={ex}
               onClick={() => onExample(ex)}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-neutral-400 backdrop-blur transition hover:border-white/25 hover:text-neutral-100"
+              className="rounded-forge border border-line bg-tint px-3 py-1.5 text-xs text-forge-steel transition hover:border-forge-blue hover:text-forge-ice"
             >
               {ex}
             </button>
@@ -597,18 +713,201 @@ function Hero({
   );
 }
 
-function LogoMark() {
+function ClarifyStep({
+  idea,
+  questions,
+  answers,
+  setAnswer,
+  answered,
+  onBack,
+  onForge,
+  running,
+}: {
+  idea: string;
+  questions: ClarifyQuestion[];
+  answers: Record<string, string>;
+  setAnswer: (id: string, v: string) => void;
+  answered: number;
+  onBack: () => void;
+  onForge: () => void;
+  running: boolean;
+}) {
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src="/forgeai-mark.svg" alt="FORGEAI" className="h-8 w-8 rounded-lg" />
+    <main className="mx-auto max-w-2xl px-6 py-12">
+      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-forge-blue">
+        Focusing before the forge
+      </p>
+      <h2 className="mt-2 font-display text-3xl font-bold tracking-tight text-forge-bright sm:text-4xl">
+        A few quick questions.
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-forge-steel">
+        These shape what the agents build. Tap an option or type your own.
+      </p>
+      <p className="mt-4 border-l-2 border-forge-blue/40 pl-3 text-sm italic text-forge-steel">
+        &ldquo;{idea}&rdquo;
+      </p>
+
+      <div className="mt-8 flex flex-col gap-6">
+        {questions.map((q, i) => {
+          const chosen = answers[q.id] ?? "";
+          const isCustom = chosen.trim() !== "" && !q.options.includes(chosen);
+          return (
+            <div key={q.id} className="rounded-forge border border-line bg-tint p-5">
+              <div className="flex items-baseline gap-3">
+                <span className="font-mono text-xs text-forge-blue">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <h3 className="text-[15px] font-semibold text-forge-bright">{q.question}</h3>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {q.options.map((opt) => {
+                  const selected = chosen === opt;
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => setAnswer(q.id, selected ? "" : opt)}
+                      className={`rounded-forge border px-3 py-1.5 text-sm transition ${
+                        selected
+                          ? "border-forge-blue bg-tint-strong text-forge-ice"
+                          : "border-line bg-tint text-forge-steel hover:border-forge-blue/60 hover:text-forge-ice"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+              <input
+                value={isCustom ? chosen : ""}
+                onChange={(e) => setAnswer(q.id, e.target.value)}
+                placeholder="Or type your own answer"
+                className="mt-3 w-full rounded-forge border border-line bg-forge-bg/60 px-3 py-2 text-sm text-forge-bright outline-none transition placeholder:text-forge-steel/50 focus:border-forge-blue"
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-8 flex items-center justify-between">
+        <span className="font-mono text-xs text-forge-steel">
+          {answered} of {questions.length} answered
+        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="rounded-forge border border-line px-4 py-2.5 text-sm text-forge-steel transition hover:border-forge-blue hover:text-forge-ice"
+          >
+            Back
+          </button>
+          <button
+            onClick={onForge}
+            disabled={running}
+            className="rounded-forge bg-forge-blue px-6 py-2.5 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice disabled:opacity-50"
+          >
+            Forge it
+          </button>
+        </div>
+      </div>
+    </main>
   );
 }
 
-function PaperclipIcon() {
+function AssetsStep({
+  idea,
+  agents,
+  exporting,
+  onDownloadZip,
+  onView,
+  onDownloadDoc,
+}: {
+  idea: string;
+  agents: AgentState[];
+  exporting: boolean;
+  onDownloadZip: () => void;
+  onView: (id: TabId) => void;
+  onDownloadDoc: (id: TabId, file: string) => void;
+}) {
+  const byId = Object.fromEntries(agents.map((a) => [a.meta.id, a]));
+  const docs = ARTIFACTS.filter((d) => byId[d.id]?.text);
+
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49" />
-    </svg>
+    <main className="mx-auto max-w-2xl px-6 py-12">
+      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-forge-blue">Assets</p>
+      <h2 className="mt-2 font-display text-3xl font-bold tracking-tight text-forge-bright sm:text-4xl">
+        Your product, forged.
+      </h2>
+
+      <div className="mt-8 rounded-forge border border-forge-blue/50 bg-tint-strong p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-forge-blue">zip</p>
+            <p className="truncate font-mono text-sm text-forge-bright">{slug(idea)}.zip</p>
+            <p className="mt-1 text-xs text-forge-steel">
+              {docs.length} documents · generated code · plain-English hosting guide
+            </p>
+          </div>
+          <button
+            onClick={onDownloadZip}
+            disabled={exporting}
+            className="shrink-0 rounded-forge bg-forge-blue px-5 py-2.5 text-sm font-semibold text-[#02121f] transition hover:bg-forge-ice disabled:opacity-50"
+          >
+            {exporting ? "Packing…" : "Download zip"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-2">
+        {docs.map((d) => {
+          const a = byId[d.id];
+          const kb = Math.max(1, Math.round((a?.text.length ?? 0) / 1024));
+          return (
+            <div
+              key={d.id}
+              className="flex items-center justify-between gap-3 rounded-forge border border-line bg-tint px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-mono text-sm text-forge-bright">{d.file}</p>
+                <p className="text-xs text-forge-steel">
+                  {d.owner} · {kb} KB
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 font-mono text-xs">
+                <button
+                  onClick={() => onView(d.id)}
+                  className="rounded-forge border border-line px-3 py-1.5 text-forge-steel transition hover:border-forge-blue hover:text-forge-ice"
+                >
+                  view
+                </button>
+                <button
+                  onClick={() => onDownloadDoc(d.id, d.file)}
+                  className="rounded-forge border border-line px-3 py-1.5 text-forge-steel transition hover:border-forge-blue hover:text-forge-ice"
+                >
+                  download
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </main>
+  );
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function LogoMark() {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/forgeai-mark.svg" alt="FORGEAI" className="h-7 w-7 rounded-forge" />
   );
 }
 
