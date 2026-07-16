@@ -31,9 +31,13 @@ def _build_message(agent: Agent, ctx: dict):
         "and product representation — match what they show.\n"
         "IMPORTANT: to make the ACTUAL uploaded image(s) appear in your HTML/React "
         f"output, use these EXACT strings as the image `src`: {slots}. They are "
-        "swapped for the real uploaded images before rendering. Place each where that "
-        "product/photo belongs (hero, product cards, gallery). Do NOT invent external "
-        "image URLs for the user's own product when a placeholder fits."
+        "swapped for the real uploaded images before rendering.\n"
+        "Look at each image and judge what it IS before placing it: a plain shot of "
+        "the product itself belongs in product cards/detail imagery; a photo of a "
+        "person/model using or holding the product is LIFESTYLE imagery — use it for "
+        "the hero, banners or brand sections, NOT as a catalog product image. If the "
+        "user's prompt says how to use an image, follow that exactly. Do NOT invent "
+        "external image URLs for the user's own product when a placeholder fits."
     )
     content = [{"type": "text", "text": text + note}]
     for img in images:
