@@ -35,3 +35,10 @@ services:
       # Comma-separated allowed CORS origins (your Vercel URL)
       - key: FRONTEND_ORIGIN
         sync: false
+      # --- Image resolver (three tiers) ---
+      # Custom/branded images: an OpenRouter image model on the existing key.
+      - key: IMAGE_GEN_MODEL
+        value: openai/gpt-5-image-mini
+      # Stock photos: free Pexels API key. Without it, stock slots use a placeholder.
+      - key: PEXELS_API_KEY
+        sync: false

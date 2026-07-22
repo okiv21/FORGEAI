@@ -122,6 +122,21 @@ export function injectUserImages(code: string, images: string[]): string {
   );
 }
 
+/**
+ * Replace `__IMG[intent|arg]__` slots with URLs resolved by the backend image
+ * resolver. Unresolved slots fall back to the neutral placeholder so the preview
+ * never shows a broken image while generation is pending or skipped.
+ */
+export function applyResolvedImages(
+  code: string,
+  resolved: Record<string, string>
+): string {
+  if (!code) return code;
+  return code.replace(/__IMG\[(?:stock|avatar|custom)\|[^\]]*\]__/g, (slot) =>
+    resolved[slot] ?? IMAGE_FALLBACK
+  );
+}
+
 /** Wrap a fragment (or full doc) into a complete, Tailwind-enabled document. */
 export function wrapPreview(html: string): string {
   const isFullDoc = /<html[\s>]/i.test(html);

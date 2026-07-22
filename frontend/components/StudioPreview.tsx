@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { AgentState } from "@/lib/types";
-import { extractHtmlPreview, extractLayoutSpec, injectUserImages } from "@/lib/parse";
+import { applyResolvedImages, extractHtmlPreview, extractLayoutSpec, injectUserImages } from "@/lib/parse";
 import { extractReactComponent } from "@/lib/react-preview";
 import { Wireframe } from "./Wireframe";
 import { LiveDevicePreview } from "./LiveDevicePreview";
@@ -44,6 +44,7 @@ export function StudioPreview({
   appName,
   phase,
   images,
+  resolvedImages,
 }: {
   agents: AgentState[];
   tab: TabId;
@@ -51,6 +52,7 @@ export function StudioPreview({
   appName: string;
   phase: string;
   images: string[];
+  resolvedImages: Record<string, string>;
 }) {
   const byId = useMemo(
     () => Object.fromEntries(agents.map((a) => [a.meta.id, a])),
@@ -64,15 +66,16 @@ export function StudioPreview({
   const previewSource = extractReactComponent(remediationText)
     ? remediationText
     : frontendText;
-  // Swap the `__USER_IMAGE_n__` slots for the user's actual uploaded photos.
+  // Fill image slots: uploaded photos (__USER_IMAGE_n__) and resolved generated
+  // slots (__IMG[...]__) both get swapped in before the preview renders.
   const html = useMemo(() => {
     const raw = extractHtmlPreview(previewSource);
-    return raw ? injectUserImages(raw, images) : null;
-  }, [previewSource, images]);
+    return raw ? applyResolvedImages(injectUserImages(raw, images), resolvedImages) : null;
+  }, [previewSource, images, resolvedImages]);
   const reactCode = useMemo(() => {
     const raw = extractReactComponent(previewSource);
-    return raw ? injectUserImages(raw, images) : null;
-  }, [previewSource, images]);
+    return raw ? applyResolvedImages(injectUserImages(raw, images), resolvedImages) : null;
+  }, [previewSource, images, resolvedImages]);
   const spec = useMemo(() => extractLayoutSpec(uiuxText), [uiuxText]);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);

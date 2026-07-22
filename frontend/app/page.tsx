@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentMeta, AgentState, Health } from "@/lib/types";
-import { extractHtmlPreview, extractLayoutSpec, injectUserImages } from "@/lib/parse";
+import { applyResolvedImages, extractHtmlPreview, extractLayoutSpec, injectUserImages } from "@/lib/parse";
 import { API_BASE } from "@/lib/api";
 import { fileToDownscaledDataUrl } from "@/lib/upload";
 import { HealthBar } from "@/components/HealthBar";
@@ -66,6 +66,9 @@ export default function Home() {
 
   const [notice, setNotice] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [productContext, setProductContext] = useState<Record<string, any>>({});
+  const [resolvedImages, setResolvedImages] = useState<Record<string, string>>({});
+  const [generatingImages, setGeneratingImages] = useState(false);
   const agentMetas = useRef<AgentMeta[]>([]);
 
   useEffect(() => {
@@ -135,6 +138,8 @@ export default function Home() {
     setImages([]);
     setQuestions([]);
     setAnswers({});
+    setResolvedImages({});
+    setProductContext({});
     setNotice(null);
     setStep("idea");
   }
@@ -181,6 +186,7 @@ export default function Home() {
 
     setRunning(true);
     setAgents([]);
+    setResolvedImages({});
     setAutoFollow(true);
     setTab("pm");
     setStep("forge");
@@ -234,6 +240,7 @@ export default function Home() {
   function handleEvent(ev: any) {
     switch (ev.type) {
       case "run_start":
+        setProductContext(ev.product_context ?? {});
         setAgents(
           (ev.agents as AgentMeta[]).map((m) => ({
             meta: m,
@@ -262,6 +269,39 @@ export default function Home() {
     }
   }
 
+  // Image slots present in the generated code (before resolution).
+  const imageSlots = useMemo(() => {
+    const text = agents
+      .filter((a) => a.meta.id === "frontend" || a.meta.id === "remediation")
+      .map((a) => a.text)
+      .join("\n");
+    return /__IMG\[/.test(text);
+  }, [agents]);
+
+  async function generateImages() {
+    if (generatingImages) return;
+    setGeneratingImages(true);
+    setNotice(null);
+    try {
+      const text = agents
+        .filter((a) => a.meta.id === "frontend" || a.meta.id === "remediation")
+        .map((a) => a.text)
+        .join("\n");
+      const resp = await fetch(`${API_BASE}/resolve-images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, product_context: productContext }),
+      });
+      if (!resp.ok) throw new Error("resolve failed");
+      const data = await resp.json();
+      setResolvedImages(data.resolved ?? {});
+    } catch {
+      setNotice("Could not generate images. The preview keeps its placeholders.");
+    } finally {
+      setGeneratingImages(false);
+    }
+  }
+
   async function downloadZip() {
     if (exporting) return;
     setExporting(true);
@@ -275,7 +315,12 @@ export default function Home() {
       const resp = await fetch(`${API_BASE}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea, outputs }),
+        body: JSON.stringify({
+          idea,
+          outputs,
+          product_context: productContext,
+          resolved_images: resolvedImages,
+        }),
       });
       if (!resp.ok) throw new Error("Export failed");
       const blob = await resp.blob();
@@ -290,7 +335,8 @@ export default function Home() {
   function downloadDoc(id: TabId, file: string) {
     const a = agents.find((x) => x.meta.id === id);
     if (!a?.text) return;
-    triggerDownload(new Blob([injectUserImages(a.text, images)], { type: "text/markdown" }), file);
+    const text = applyResolvedImages(injectUserImages(a.text, images), resolvedImages);
+    triggerDownload(new Blob([text], { type: "text/markdown" }), file);
   }
 
   const progress = started
@@ -411,6 +457,16 @@ export default function Home() {
                   onSelect={(id) => selectTab(id as TabId, true)}
                 />
 
+                {done && !running && imageSlots && (
+                  <button
+                    onClick={generateImages}
+                    disabled={generatingImages}
+                    className="w-full rounded-forge border border-forge-blue/50 bg-tint-strong px-4 py-2.5 text-sm font-semibold text-forge-ice transition hover:bg-forge-blue/20 disabled:opacity-50"
+                  >
+                    {generatingImages ? "Generating images…" : "✦ Generate images"}
+                  </button>
+                )}
+
                 {done && !running && (
                   <button
                     onClick={() => setStep("assets")}
@@ -429,6 +485,7 @@ export default function Home() {
                   appName={slug(idea)}
                   phase={phase}
                   images={images}
+                  resolvedImages={resolvedImages}
                 />
               </div>
             </div>

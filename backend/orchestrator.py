@@ -64,7 +64,11 @@ async def run_pipeline(
         "product_context": product_context or {},
     }
 
-    yield {"type": "run_start", "agents": [agent_public(a) for a in AGENTS]}
+    yield {
+        "type": "run_start",
+        "agents": [agent_public(a) for a in AGENTS],
+        "product_context": ctx["product_context"],
+    }
 
     for agent in AGENTS:
         target = router.resolve(agent.route)

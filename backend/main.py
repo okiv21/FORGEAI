@@ -26,6 +26,7 @@ from clarify import (
     render_context,
 )
 from export_bundle import build_zip
+from image_resolver import apply_resolved, find_slots, resolve_images
 from model_router import ModelRouter
 from orchestrator import run_pipeline
 from persistence import ProductionStore
@@ -74,6 +75,15 @@ class ExportRequest(BaseModel):
     idea: str = ""
     # Completed run outputs: agent id -> generated Markdown/code.
     outputs: dict[str, str] = Field(default_factory=dict)
+    product_context: dict = Field(default_factory=dict)
+    # Optional pre-resolved image slots (from a preview "Generate images" pass) so
+    # the zip matches what the user saw, without regenerating.
+    resolved_images: dict[str, str] = Field(default_factory=dict)
+
+
+class ResolveRequest(BaseModel):
+    text: str = ""
+    product_context: dict = Field(default_factory=dict)
 
 
 def _slug(text: str) -> str:
@@ -132,10 +142,31 @@ async def run(req: RunRequest, authorization: str | None = Header(default=None))
     )
 
 
+@app.post("/resolve-images")
+async def resolve_images_endpoint(req: ResolveRequest):
+    """Resolve __IMG[...] slots in generated code to real image URLs."""
+    return {"resolved": await resolve_images(req.text, req.product_context)}
+
+
 @app.post("/export")
 async def export(req: ExportRequest):
-    """Bundle a completed run into a downloadable zip (code + docs + host guide)."""
-    data = build_zip(req.idea, req.outputs)
+    """Bundle a completed run into a downloadable zip (code + docs + host guide).
+
+    Image slots are resolved so the downloaded code ships with real imagery:
+    reuse any slots already resolved in the preview, and fill the rest here.
+    """
+    outputs = req.outputs
+    combined = "\n".join(outputs.values())
+    resolved = dict(req.resolved_images)
+    remaining = "\n".join(
+        s for s in find_slots(combined) if s not in resolved
+    )
+    if remaining:
+        resolved.update(await resolve_images(remaining, req.product_context))
+    if resolved:
+        outputs = {k: apply_resolved(v, resolved) for k, v in outputs.items()}
+
+    data = build_zip(req.idea, outputs)
     filename = f"{_slug(req.idea)}.zip"
     return Response(
         content=data,
