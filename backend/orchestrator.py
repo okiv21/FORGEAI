@@ -49,10 +49,20 @@ def _build_message(agent: Agent, ctx: dict):
 
 
 async def run_pipeline(
-    idea: str, router: ModelRouter, images: list[str] | None = None
+    idea: str,
+    router: ModelRouter,
+    images: list[str] | None = None,
+    product_context: dict | None = None,
 ) -> AsyncIterator[dict]:
     images = images or []
-    ctx: dict = {"idea": idea, "outputs": {}, "images": images}
+    # product_context: structured {products, brand_feel, target_audience, key_pages}
+    # from the discovery step. Available to agents and (later) the image resolver.
+    ctx: dict = {
+        "idea": idea,
+        "outputs": {},
+        "images": images,
+        "product_context": product_context or {},
+    }
 
     yield {"type": "run_start", "agents": [agent_public(a) for a in AGENTS]}
 

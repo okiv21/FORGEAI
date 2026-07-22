@@ -13,10 +13,16 @@ services:
     envVars:
       - key: OPENROUTER_API_KEY
         sync: false
+      # UI/UX + Frontend design tier. Swap this ONE value for the model bake-off:
+      # moonshotai/kimi-k2.6 (cheap), moonshotai/kimi-k3 (better), openai/gpt-5.6-sol.
+      - key: DESIGN_AGENT_MODEL
+        value: moonshotai/kimi-k2.6
+      # Free slugs rotate; verify with backend/list_free_models.py when a chain fails.
+      # These are fallbacks behind DESIGN_AGENT_MODEL for the cloud-frontend route.
       - key: OPENROUTER_FRONTEND_MODEL
-        value: openai/gpt-5.6-sol,qwen/qwen3-coder:free,poolside/laguna-m.1:free
+        value: nvidia/nemotron-nano-12b-v2-vl:free,poolside/laguna-s-2.1:free,poolside/laguna-m.1:free
       - key: OPENROUTER_BACKEND_MODEL
-        value: poolside/laguna-m.1:free,cohere/north-mini-code:free,qwen/qwen3-coder:free
+        value: poolside/laguna-m.1:free,cohere/north-mini-code:free,poolside/laguna-s-2.1:free
       - key: OPENROUTER_PM_MODEL
         value: deepseek/deepseek-v4-flash,nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free
       - key: OPENROUTER_REVIEWER_MODEL

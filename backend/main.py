@@ -19,7 +19,12 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents import AGENTS, agent_public
-from clarify import fold_answers_into_idea, generate_questions
+from clarify import (
+    build_product_context,
+    fold_answers_into_idea,
+    generate_questions,
+    render_context,
+)
 from export_bundle import build_zip
 from model_router import ModelRouter
 from orchestrator import run_pipeline
@@ -99,8 +104,18 @@ async def run(req: RunRequest, authorization: str | None = Header(default=None))
     store.claim_generation(user_id)
     idea = fold_answers_into_idea(req.idea, req.answers)
 
+    # Structured product understanding (best-effort) enriches every agent and
+    # feeds the image resolver. Only runs when the user answered questions.
+    product_context = (
+        await build_product_context(req.idea, req.answers, router) if req.answers else {}
+    )
+    if product_context:
+        rendered = render_context(product_context)
+        if rendered:
+            idea = f"{idea}\n\n{rendered}"
+
     async def event_stream():
-        async for event in run_pipeline(idea, router, req.images):
+        async for event in run_pipeline(idea, router, req.images, product_context):
             yield f"data: {json.dumps(event)}\n\n"
             if event["type"] == "run_done":
                 try:

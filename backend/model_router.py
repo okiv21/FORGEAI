@@ -66,7 +66,14 @@ def _is_vision(model: str) -> bool:
     """Heuristic: does this model accept image input? Used to decide whether to
     forward uploaded images or strip them to text for a non-vision fallback."""
     m = model.lower()
-    return any(t in m for t in ("gpt-5", "gpt-4o", "gemini", "claude", "-vl", "vision"))
+    return any(
+        t in m
+        for t in (
+            "gpt-5", "gpt-4o", "gemini", "claude", "-vl", "vision",
+            # Kimi K2.6 / K2.7 / K3 accept image input (design agents run on these).
+            "kimi-k2.5", "kimi-k2.6", "kimi-k2.7", "kimi-k3",
+        )
+    )
 
 
 @dataclass
@@ -105,9 +112,29 @@ class ModelRouter:
     }
 
     def _or_slugs(self, route: str) -> list[str]:
-        """A route's OpenRouter models, in preference order (comma-separated env)."""
+        """A route's OpenRouter models, in preference order (comma-separated env).
+
+        The design agents (UI/UX + Frontend, both on 'cloud-frontend') lead with a
+        single swappable DESIGN_AGENT_MODEL, so the whole design tier can be pointed
+        at a different model (moonshotai/kimi-k2.6, moonshotai/kimi-k3, or
+        openai/gpt-5.6-sol) in ONE place for the model bake-off. The route's
+        OPENROUTER_FRONTEND_MODEL entries stay on as fallbacks so a run still
+        completes if the primary is rate-limited.
+        """
+        slugs: list[str] = []
+        if route == "cloud-frontend":
+            design = _env("DESIGN_AGENT_MODEL", "moonshotai/kimi-k2.6")
+            slugs += [s.strip() for s in design.split(",") if s.strip()]
         raw = _env(self._OR_ENV.get(route, ""))
-        return [s.strip() for s in raw.split(",") if s.strip()]
+        slugs += [s.strip() for s in raw.split(",") if s.strip()]
+        # De-duplicate while preserving order.
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for s in slugs:
+            if s not in seen:
+                seen.add(s)
+                ordered.append(s)
+        return ordered
 
     def _or_target(self, slug: str) -> Resolved:
         return Resolved(
