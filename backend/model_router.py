@@ -25,6 +25,16 @@ load_dotenv()
 # Free-tier models return 429 routinely, so this is the common path.
 _TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 
+# Streaming timeout: generous connect + a per-read (between-token) cap so a stalled
+# model fails over instead of hanging forever. A long-but-progressing generation is
+# fine because the read clock resets on every chunk.
+_STREAM_TIMEOUT = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
+
+# Cap output tokens: without this, OpenRouter defaults to the model's full context
+# (e.g. 65536), which makes paid models demand huge credit reservations up front
+# (a 402 on a low balance) and lets slow models run away. Override with env.
+_MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS") or "16000")
+
 
 def _is_transient(exc: Exception) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
@@ -213,7 +223,7 @@ class ModelRouter:
         import json
         url = f"{t.base_url}/api/chat"
         payload = {"model": t.model, "messages": messages, "stream": True}
-        async with httpx.AsyncClient(timeout=None) as client:
+        async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as client:
             async with client.stream("POST", url, json=payload) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
@@ -228,8 +238,13 @@ class ModelRouter:
         import json
         url = f"{t.base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {t.api_key}", "Content-Type": "application/json"}
-        payload = {"model": t.model, "messages": messages, "stream": True}
-        async with httpx.AsyncClient(timeout=None) as client:
+        payload = {
+            "model": t.model,
+            "messages": messages,
+            "stream": True,
+            "max_tokens": _MAX_OUTPUT_TOKENS,
+        }
+        async with httpx.AsyncClient(timeout=_STREAM_TIMEOUT) as client:
             async with client.stream("POST", url, headers=headers, json=payload) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
