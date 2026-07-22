@@ -52,35 +52,39 @@ loading skeleton  ->  wireframe (from the UI/UX layout)  ->  live running app
 
 ## Key features
 
-**Clarifying questions, not guesswork.** A dedicated step generates 3 to 4
-questions tailored to your specific idea before the agents run. Tap an option or
-type your own answer; skip anything you like. The answers flow into the product
-requirements, the schema, and the scope of what gets built.
+**Discovery, not guesswork.** Before the agents run, a discovery step reads your
+idea and asks questions tailored to it: the specific products or items, how they
+are packaged and presented, the audience, the brand feel, and the key pages. The
+number of questions adapts, more for visual or catalog ideas and fewer for simple
+utilities. Your answers are synthesised into a structured product understanding
+that flows into every agent, so the plan matches what you actually meant.
 
 **Live preview that actually runs.** The generated frontend boots as a real
 React app inside your browser using [Sandpack](https://sandpack.codesandbox.io),
 so you can click through it. There is no hosting or build step to see it work.
 The app is written mobile first, so it fits any screen once you deploy it.
 
-**Design quality, not AI slop.** The design agents run on a strong model with a
+**Design quality, not AI slop.** The design agents run on a capable model with a
 built in taste brief ([design_taste.py](backend/design_taste.py)), so the result
-looks intentionally designed instead of the usual generic layout.
+looks intentionally designed instead of the usual generic layout. The design
+model is a single swappable setting (`DESIGN_AGENT_MODEL`) for cost and quality
+tuning.
 
-**Your own product photos, used for real.** Upload up to six product or concept
-images. The design agents use them for visual direction, and your actual photos
-are placed into the generated app instead of AI invented stand ins.
+**Real imagery, three ways.** Upload up to six product photos and your actual
+images are placed into the generated app. For everything you did not upload, a
+deterministic image resolver fills each slot from the cheapest good source:
+generic content from free stock photos, profile pictures from generated avatars,
+and branded product shots generated from the discovery step's visual description
+so a hero image looks like your real product.
 
 **Findings get fixed, not just listed.** The Reviewer and Security agents flag
 issues, then a Remediation agent takes those findings and produces corrected,
 hardened code. The preview shows the fixed version.
 
 **Download the whole project.** When a build finishes, one click gives you a zip
-folder containing every part of the plan, the generated code as real files, and a
-plain English Word document that walks you through hosting it step by step.
-
-**Accounts and history.** Sign in with Supabase, and every run is saved to a
-personal history sidebar you can click to reload. A daily usage cap and row level
-security keep each account to its own data.
+folder containing every part of the plan, the generated code as real files (with
+images baked in), and a plain English Word document that walks you through
+hosting it step by step.
 
 **Resilient by design.** Every agent has a fallback chain of models. If one model
 is rate limited or unavailable, the run switches to the next option automatically,
@@ -119,18 +123,18 @@ python backend/list_free_models.py
 
 ```
 Frontend (Next.js, Tailwind)                    Backend (FastAPI)
-  Four step studio: idea, clarify, forge, assets   orchestrator.py  runs the pipeline and streams events
-  Live preview via Sandpack                        agents.py        the 11 agents and their prompts
-  Supabase auth and history sidebar                clarify.py       idea-specific clarifying questions
-  Talks to the backend over a live stream          model_router.py  fallback chains, vision, resilience
-                                                    export_bundle.py builds the downloadable zip
-                                                    design_taste.py  the taste brief
-
-  Supabase: Postgres (projects, usage) with Auth and row level security
+  Four step studio: idea, clarify, forge, assets   orchestrator.py   runs the pipeline and streams events
+  Live preview via Sandpack                        agents.py         the 11 agents and their prompts
+  Talks to the backend over a live stream          clarify.py        discovery questions + product context
+                                                   model_router.py   fallback chains, vision, resilience
+                                                   image_resolver.py  stock / avatar / generated images
+                                                   export_bundle.py   builds the downloadable zip
+                                                   design_taste.py    the taste brief
 ```
 
-The browser talks to the backend directly rather than through a Next.js proxy,
-because the proxy buffers the live stream and would break the real time updates.
+The app runs with no sign in required. The browser talks to the backend directly
+rather than through a Next.js proxy, because the proxy buffers the live stream and
+would break the real time updates.
 
 ## Run it locally
 
@@ -147,8 +151,14 @@ uvicorn main:app --reload --port 8000
 
 Settings in `backend/.env`:
 
-* `OPENROUTER_API_KEY` powers the cloud agents.
+* `OPENROUTER_API_KEY` powers the cloud agents and generated images.
+* `DESIGN_AGENT_MODEL` is the one model the UI/UX and Frontend agents run on
+  (default `moonshotai/kimi-k2.6`). Swap it for the bake-off: `moonshotai/kimi-k3`
+  or `openai/gpt-5.6-sol`.
 * `OPENROUTER_*_MODEL` are comma separated fallback chains, one per agent tier.
+* `PEXELS_API_KEY` (optional, free) enables the stock photo image tier.
+* `IMAGE_GEN_MODEL` (optional) is the OpenRouter image model for branded images
+  (default `openai/gpt-5-image-mini`).
 * With no key set, every agent falls back to local Ollama. Pull the models first
   with `ollama pull qwen3:8b` and `ollama pull llama3.2:3b`.
 
@@ -164,19 +174,15 @@ npm run dev                          # http://localhost:3000
 Settings in `frontend/.env.local`:
 
 * `NEXT_PUBLIC_API_BASE` is the backend URL (default `http://localhost:8000`).
-* `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` enable accounts
-  and history. Without them the app still runs, just without sign in.
 
-Apply the database migrations in `supabase/migrations/` using the Supabase SQL
-Editor, or with `supabase db push`.
+The app runs anonymously, so no frontend keys beyond the API base are required.
 
 ## Deploy it
 
-The free tier stack is Vercel for the frontend, Render for the backend, and
-Supabase for the database and auth. A GitHub Actions workflow
-([deploy.yml](.github/workflows/deploy.yml)) can apply migrations and trigger both
+The free tier stack is Vercel for the frontend and Render for the backend. A
+GitHub Actions workflow ([deploy.yml](.github/workflows/deploy.yml)) triggers the
 deploys automatically on every push. Full instructions and the list of required
-secrets are in [DEPLOYMENT.md](DEPLOYMENT.md).
+environment variables are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Project status
 
